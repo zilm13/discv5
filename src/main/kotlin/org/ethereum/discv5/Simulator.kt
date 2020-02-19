@@ -14,7 +14,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 val PEER_COUNT = 1_000
-val RANDOM = SecureRandom(ByteArray(1) { 1.toByte() })
+val RANDOM : InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val ROUNDTRIP_MS = 100
 
