@@ -6,21 +6,23 @@ import org.ethereum.discv5.core.BUCKETS_COUNT
 import org.ethereum.discv5.core.Enr
 import org.ethereum.discv5.core.KademliaTable
 import org.ethereum.discv5.core.Node
+import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
+import org.ethereum.discv5.util.formatTable
 import java.security.SecureRandom
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-val PEER_COUNT = 10_000
+val PEER_COUNT = 1_000
 val RANDOM = SecureRandom(ByteArray(1) { 1.toByte() })
 val ROUNDS_COUNT = 100
+val ROUNDTRIP_MS = 100
 
 fun main(args: Array<String>) {
-    println("Creating private key - enr pairs")
+    println("Creating private key - enr pairs for $PEER_COUNT nodes")
     val peers = (0 until (PEER_COUNT)).map {
         val ip = "127.0.0.1"
-        val privKey =
-            KeyUtils.genPrivKey(RANDOM)
+        val privKey = KeyUtils.genPrivKey(RANDOM)
         val addr = Multiaddr("/ip4/$ip/tcp/$it")
         val enr = Enr(
             addr,
@@ -34,11 +36,13 @@ fun main(args: Array<String>) {
     // It's believed that p2p node uptime is complied with Pareto distribution
     // See Stefan Saroiu, Krishna P. Gummadi, Steven D. Gribble "A Measurement Study of Peer-to-Peer File Sharing Systems"
     // https://www.researchgate.net/publication/2854843_A_Measurement_Study_of_Peer-to-Peer_File_Sharing_Systems
-    // For simulations lets assume that it's Pareto with alpha = 0.24 and xm = 10
+    // For simulations lets assume that it's Pareto with alpha = 0.18 and xm = 1.
+    // With such distribution 40% of peers are mature enough to pass through its Kademlia table all peers in network.
+
     val peerDistribution = calcPeerDistribution(
         PEER_COUNT,
-        0.24,
-        10.0,
+        0.18,
+        1.0,
         240.0
     )
     assert(peers.size == peerDistribution.size)
@@ -49,28 +53,96 @@ fun main(args: Array<String>) {
             println("$index peer tables filled")
         }
     }
+//    printKademliaTableStats(peers)
 
-    for (i in 0 until ROUNDS_COUNT) {
+    println("Run simulation with FINDNODE(distance) API method according to Discovery V5 protocol")
+    runFindNodesStrictSimulation(peers, peersMap)
+    val trafficFindNodeStrict = gatherTrafficStats(peers)
+    val latencyFindNodeStrict = gatherLatencyStats(peers)
+    peers.forEach(Node::resetStats)
+
+    println("Run simulation with FINDNODE(peerId) API method similar to original Kademlia protocol")
+    runFindNeighborsSimulation(peers, peersMap)
+    val trafficFindNeighbors = gatherTrafficStats(peers)
+    val latencyFindNeighbors = gatherLatencyStats(peers)
+    peers.forEach(Node::resetStats)
+
+//    FIXME
+//    runFindNodesDownSimulation(peers, peersMap)
+
+    println("trafficFindNodeStrict")
+    trafficFindNodeStrict.forEach { println(it) }
+
+    println("latencyFindNodeStrict")
+    latencyFindNodeStrict.forEach { println(it) }
+
+    println("trafficFindNeighbors")
+    trafficFindNeighbors.forEach { println(it) }
+
+    println("latencyFindNeighbors")
+    latencyFindNeighbors.forEach { println(it) }
+
+//    println("Gathering statistics")
+//    val header = "Peer #\t Traffic\n"
+//    val stats = peers.mapIndexed { index, peer ->
+//        Pair(index.toString(),calcTraffic(
+//            peer
+//        ))
+//    }.sortedBy { pair -> pair.second }.map {pair -> pair.first + "\t" + pair.second}.joinToString("\n")
+//    println((header + stats).formatTable(true))
+
+}
+
+fun gatherTrafficStats(peers: List<Node>): List<Int> {
+    return peers.map { calcTraffic(it) }.sorted()
+}
+
+fun gatherLatencyStats(peers: List<Node>): List<Int> {
+    return peers.map { calcTotalTime(it) }.sorted()
+}
+
+fun runFindNodesStrictSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int = ROUNDS_COUNT) {
+    runSimulationImpl({ node, anotherNode -> node.findNodesStrict(anotherNode) }, peers, peersMap, rounds)
+}
+
+fun runFindNodesDownSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int = ROUNDS_COUNT) {
+    runSimulationImpl({ node, anotherNode -> node.findNodesDown(anotherNode) }, peers, peersMap, rounds)
+}
+
+fun runFindNeighborsSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int = ROUNDS_COUNT) {
+    runSimulationImpl({ node, anotherNode -> node.findNeighbors(anotherNode) }, peers, peersMap, rounds)
+}
+
+fun runSimulationImpl(nodeTask: (Node, Node) -> Unit, peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int) {
+    for (i in 0 until rounds) {
         println("Simulating round #${i + 1}")
         peers.forEach {
             val allEnrs = it.table.findAll()
             val nextEnr = allEnrs[i % allEnrs.size]
             val nextNode: Node = peersMap[nextEnr]!!
-            it.findNodesStrict(nextNode)
-//            it.findNeighbors(nextNode)
-//            it.findNodesDown(nextNode)
+            nodeTask(it, nextNode)
         }
     }
+}
 
-    // TODO: gather stats
+fun printKademliaTableStats(peers: List<Node>) {
+    println("Kademlia table stats for every peer")
+    println("===================================")
+    val header = "Peer #\t Stored nodes\n"
+    val stats = peers.mapIndexed { index, peer ->
+        index.toString() + "\t" + calcKademliaPeers(
+            peer.table
+        )
+    }.joinToString("\n")
+    println((header + stats).formatTable(true))
+}
 
-//    val header = "Peer #\t Stored nodes\n"
-//    val stats = peers.mapIndexed { index, peer ->
-//        index.toString() + "\t" + calcKademliaPeers(
-//            peer.table
-//        )
-//    }.joinToString("\n")
-//    println((header + stats).formatTable(true))
+fun calcTraffic(node: Node): Int {
+    return node.incomingMessages.sum() + node.outgoingMessages.sum()
+}
+
+fun calcTotalTime(node: Node): Int {
+    return node.outgoingMessages.size * ROUNDTRIP_MS
 }
 
 fun calcKademliaPeers(table: KademliaTable): Int {

@@ -24,6 +24,11 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
     val outgoingMessages: MutableList<Int> = ArrayList()
     val incomingMessages: MutableList<Int> = ArrayList()
 
+    fun resetStats() {
+        outgoingMessages.clear()
+        incomingMessages.clear()
+    }
+
     fun findNodesStrict(other: Node): List<Enr> {
         val startNode = Enr(Multiaddr(ByteArray(0)), enr.id)
         val startBucket = other.enr.simTo(enr, DISTANCE_DIVISOR)
