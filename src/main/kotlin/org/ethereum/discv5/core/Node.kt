@@ -50,6 +50,10 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
                 incomingMessages.addAll(MessageSizeEstimator.getNodesSize(bottomBucketNodes.size))
                 bottomBucketNodes.forEach { candidates.add(it) }
             }
+            // Have not executed any of 2 above ifs
+            if (topBucket > BUCKETS_COUNT && bottomBucket < 1) {
+                break
+            }
             KademliaTable.filterNeighborhood(startNode, res, candidates, K_BUCKET, DISTANCE_DIVISOR)
             currentRadius++
         }

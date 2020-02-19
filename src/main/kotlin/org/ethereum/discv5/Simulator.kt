@@ -38,7 +38,6 @@ fun main(args: Array<String>) {
     // https://www.researchgate.net/publication/2854843_A_Measurement_Study_of_Peer-to-Peer_File_Sharing_Systems
     // For simulations lets assume that it's Pareto with alpha = 0.18 and xm = 1.
     // With such distribution 40% of peers are mature enough to pass through its Kademlia table all peers in network.
-
     val peerDistribution = calcPeerDistribution(
         PEER_COUNT,
         0.18,

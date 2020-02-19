@@ -101,6 +101,10 @@ class KademliaTable(
             if (bottomBucket in 1 until topBucket) {
                 findStrict(bottomBucket).forEach { candidates.add(it) }
             }
+            // Have not executed any of 2 above ifs
+            if (topBucket > numberBuckets && bottomBucket < 1) {
+                break
+            }
             filterNeighborhood(startNode, res, candidates, limit, distanceDivisor)
             currentRadius++
         }
