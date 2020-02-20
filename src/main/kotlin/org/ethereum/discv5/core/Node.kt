@@ -111,7 +111,7 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
     }
 
     fun findNeighbors(other: Node): List<Enr> {
-        outgoingMessages.add(MessageSizeEstimator.getNeighborhoodSize())
+        outgoingMessages.add(MessageSizeEstimator.getNeighborsSize())
         val nodes = other.table.findNeighbors(enr.id)
         incomingMessages.addAll(MessageSizeEstimator.getNodesSize(nodes.size))
         return nodes

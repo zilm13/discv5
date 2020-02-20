@@ -17,6 +17,9 @@ val PUBKEY_SIZE_BITS = 256
 
 class KeyUtils {
     companion object {
+        /**
+         * Generates Secp256k1 Key Pair using provided random source
+         */
         fun genPrivKey(rnd: SecureRandom): PrivKey {
             return generateSecp256k1KeyPair(rnd).first
         }
@@ -36,7 +39,8 @@ class KeyUtils {
         }
 
         /**
-         * Produces exactly 256-bit compressed public key with recovery byte omitted if presented
+         * Produces exactly 256-bit compressed public key with recovery byte truncated.
+         * Prefixed with 00's if needed or with removed leading zeros if size exceeds 256 bits.
          */
         fun privToPubCompressed(privKey: PrivKey): ByteArray {
             val pubKey = privKey.publicKey().raw()
