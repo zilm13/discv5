@@ -21,7 +21,7 @@ class Bucket(
 }
 
 class KademliaTable(
-    private val home: Enr,
+    val home: Enr,
     private val bucketSize: Int,
     private val numberBuckets: Int,
     private val distanceDivisor: Int,

@@ -81,7 +81,7 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
                         val lastBucketNottFull = enrs.size == K_BUCKET && lastDistance != bottomBucket
                         var enrsWDistance = enrs.map { Pair(it.simTo(other.enr, DISTANCE_DIVISOR), it) }
                         if (lastBucketNottFull) {
-                            enrsWDistance = enrsWDistance.filter { it.first == lastDistance }
+                            enrsWDistance = enrsWDistance.filter { it.first != lastDistance }
                         }
                         enrsWDistance.groupBy { it.first }.forEach { bucket, pairsList ->
                             fullBucketsCache[bucket] =
@@ -98,6 +98,10 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
                 incomingMessages.addAll(MessageSizeEstimator.getNodesSize(topBucketNodes.size))
                 topBucketNodes.filter { other.enr.simTo(it, DISTANCE_DIVISOR) == topBucket }
                     .forEach { candidates.add(it) }
+            }
+            // Have not executed any of 2 above ifs
+            if (topBucket > BUCKETS_COUNT && bottomBucket < 1) {
+                break
             }
             KademliaTable.filterNeighborhood(startNode, res, candidates, K_BUCKET, DISTANCE_DIVISOR)
             currentRadius++

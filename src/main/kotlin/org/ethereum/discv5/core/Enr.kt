@@ -36,19 +36,20 @@ data class Enr(val addr: Multiaddr, val id: PeerId) {
 }
 
 /**
- * The 'distance' between this node and other is the bitwise XOR of the IDs, taken as the number.
+ * The 'distance' between this [PeerId] and other is the bitwise XOR of the IDs, taken as the number.
  *
  * <p>distance(n₁, n₂) = n₁ XOR n₂
  *
  * <p>LogDistance is reverse of length of common prefix in bits (length - number of leftmost zeros
  * in XOR)
  */
-fun Enr.to(other: Enr): Int {
-    assert(this.id.bytes.size == other.id.bytes.size)
-    val size = this.id.bytes.size
+
+fun PeerId.to(other: PeerId): Int {
+    assert(this.bytes.size == other.bytes.size)
+    val size = this.bytes.size
     val xorResult = ByteArray(size)
     for (i in 0 until size) {
-        xorResult[i] = (this.id.bytes[i] xor other.id.bytes[i])
+        xorResult[i] = (this.bytes[i] xor other.bytes[i])
     }
     var logDistance: Int = Byte.SIZE_BITS * xorResult.size // 256
     for (i in xorResult.indices) {
@@ -71,6 +72,22 @@ fun Enr.to(other: Enr): Int {
 }
 
 /**
- * Same as `to` but simplified to reduce number of possible distances for simulation
+ * Same as [PeerId.to] but reduced to decrease number of possible distances for simulation
  */
-fun Enr.simTo(other: Enr, distanceDivisor: Int) = kotlin.math.ceil(this.to(other) / distanceDivisor.toDouble()).toInt()
+fun PeerId.simTo(other: PeerId, distanceDivisor: Int) =
+    kotlin.math.ceil(this.to(other) / distanceDivisor.toDouble()).toInt()
+
+/**
+ * The 'distance' between this [Node] and other is the bitwise XOR of the [PeerId]s, taken as the number.
+ *
+ * <p>distance(n₁, n₂) = n₁ XOR n₂
+ *
+ * <p>LogDistance is reverse of length of common prefix in bits (length - number of leftmost zeros
+ * in XOR)
+ */
+fun Enr.to(other: Enr): Int = this.id.to(other.id)
+
+/**
+ * Same as [Enr.to] but reduced to decrease number of possible distances for simulation
+ */
+fun Enr.simTo(other: Enr, distanceDivisor: Int) = this.id.simTo(other.id, distanceDivisor)

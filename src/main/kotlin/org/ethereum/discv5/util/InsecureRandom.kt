@@ -17,21 +17,21 @@ class InsecureRandom : SecureRandom {
     constructor(seed: ByteArray?) : super(seed)
     constructor(secureRandomSpi: SecureRandomSpi?, provider: Provider?) : super(secureRandomSpi, provider)
 
-    private var delegate: Random? = null
+    private lateinit var delegate: Random
 
     fun setInsecureSeed(seed: Long) {
         delegate = Random(seed)
     }
 
     private fun checkDelegate() {
-        if (delegate == null) {
+        if (!::delegate.isInitialized) {
             throw RuntimeException("setInsecureSeed(Long) should be called before usage")
         }
     }
 
     override fun nextBoolean(): Boolean {
         checkDelegate()
-        return delegate!!.nextBoolean()
+        return delegate.nextBoolean()
     }
 
     override fun getAlgorithm(): String {
@@ -52,97 +52,97 @@ class InsecureRandom : SecureRandom {
 
     override fun nextGaussian(): Double {
         checkDelegate()
-        return delegate!!.nextGaussian()
+        return delegate.nextGaussian()
     }
 
     override fun nextDouble(): Double {
         checkDelegate()
-        return delegate!!.nextDouble()
+        return delegate.nextDouble()
     }
 
     override fun nextBytes(bytes: ByteArray?) {
         checkDelegate()
-        delegate!!.nextBytes(bytes)
+        delegate.nextBytes(bytes)
     }
 
     override fun nextInt(): Int {
         checkDelegate()
-        return delegate!!.nextInt()
+        return delegate.nextInt()
     }
 
     override fun nextInt(bound: Int): Int {
         checkDelegate()
-        return delegate!!.nextInt(bound)
+        return delegate.nextInt(bound)
     }
 
     override fun ints(streamSize: Long): IntStream {
         checkDelegate()
-        return delegate!!.ints(streamSize)
+        return delegate.ints(streamSize)
     }
 
     override fun ints(): IntStream {
         checkDelegate()
-        return delegate!!.ints()
+        return delegate.ints()
     }
 
     override fun ints(streamSize: Long, randomNumberOrigin: Int, randomNumberBound: Int): IntStream {
         checkDelegate()
-        return delegate!!.ints(streamSize, randomNumberOrigin, randomNumberBound)
+        return delegate.ints(streamSize, randomNumberOrigin, randomNumberBound)
     }
 
     override fun ints(randomNumberOrigin: Int, randomNumberBound: Int): IntStream {
         checkDelegate()
-        return delegate!!.ints(randomNumberOrigin, randomNumberBound)
+        return delegate.ints(randomNumberOrigin, randomNumberBound)
     }
 
     override fun nextLong(): Long {
         checkDelegate()
-        return delegate!!.nextLong()
+        return delegate.nextLong()
     }
 
     override fun nextFloat(): Float {
         checkDelegate()
-        return delegate!!.nextFloat()
+        return delegate.nextFloat()
     }
 
     override fun longs(streamSize: Long): LongStream {
         checkDelegate()
-        return delegate!!.longs(streamSize)
+        return delegate.longs(streamSize)
     }
 
     override fun longs(): LongStream {
         checkDelegate()
-        return delegate!!.longs()
+        return delegate.longs()
     }
 
     override fun longs(streamSize: Long, randomNumberOrigin: Long, randomNumberBound: Long): LongStream {
         checkDelegate()
-        return delegate!!.longs(streamSize, randomNumberOrigin, randomNumberBound)
+        return delegate.longs(streamSize, randomNumberOrigin, randomNumberBound)
     }
 
     override fun longs(randomNumberOrigin: Long, randomNumberBound: Long): LongStream {
         checkDelegate()
-        return delegate!!.longs(randomNumberOrigin, randomNumberBound)
+        return delegate.longs(randomNumberOrigin, randomNumberBound)
     }
 
     override fun doubles(streamSize: Long): DoubleStream {
         checkDelegate()
-        return delegate!!.doubles(streamSize)
+        return delegate.doubles(streamSize)
     }
 
     override fun doubles(): DoubleStream {
         checkDelegate()
-        return delegate!!.doubles()
+        return delegate.doubles()
     }
 
     override fun doubles(streamSize: Long, randomNumberOrigin: Double, randomNumberBound: Double): DoubleStream {
         checkDelegate()
-        return delegate!!.doubles(streamSize, randomNumberOrigin, randomNumberBound)
+        return delegate.doubles(streamSize, randomNumberOrigin, randomNumberBound)
     }
 
     override fun doubles(randomNumberOrigin: Double, randomNumberBound: Double): DoubleStream {
         checkDelegate()
-        return delegate!!.doubles(randomNumberOrigin, randomNumberBound)
+        return delegate.doubles(randomNumberOrigin, randomNumberBound)
     }
 
     override fun generateSeed(numBytes: Int): ByteArray {
