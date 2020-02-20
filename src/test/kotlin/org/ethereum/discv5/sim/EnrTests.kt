@@ -8,6 +8,9 @@ import org.ethereum.discv5.core.to
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
+/**
+ * Node distance [Node.to] and its reduced version [Node.simTo] tests
+ */
 class EnrTests {
     @Test
     fun testEnrTo() {
@@ -18,34 +21,48 @@ class EnrTests {
         val nodeId9s = PeerId.fromHex("9999999999999999999999999999999999999999999999999999999999999999")
         val nodeIdfs = PeerId.fromHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
         val some = Multiaddr("/ip4/127.0.0.1/tcp/1234")
-        assertEquals(0, Enr(
-            some,
-            nodeId1a
-        ).to(Enr(some, nodeId1a)))
-        assertEquals(1, Enr(
-            some,
-            nodeId0
-        ).to(Enr(some, nodeId1a)))
-        assertEquals(253, Enr(
-            some,
-            nodeId0
-        ).to(Enr(some, nodeId1b)))
-        assertEquals(253, Enr(
-            some,
-            nodeId0
-        ).to(Enr(some, nodeId1s)))
-        assertEquals(256, Enr(
-            some,
-            nodeId0
-        ).to(Enr(some, nodeId9s)))
-        assertEquals(256, Enr(
-            some,
-            nodeId0
-        ).to(Enr(some, nodeIdfs)))
-        assertEquals(255, Enr(
-            some,
-            nodeId9s
-        ).to(Enr(some, nodeIdfs)))
+        assertEquals(
+            0, Enr(
+                some,
+                nodeId1a
+            ).to(Enr(some, nodeId1a))
+        )
+        assertEquals(
+            1, Enr(
+                some,
+                nodeId0
+            ).to(Enr(some, nodeId1a))
+        )
+        assertEquals(
+            253, Enr(
+                some,
+                nodeId0
+            ).to(Enr(some, nodeId1b))
+        )
+        assertEquals(
+            253, Enr(
+                some,
+                nodeId0
+            ).to(Enr(some, nodeId1s))
+        )
+        assertEquals(
+            256, Enr(
+                some,
+                nodeId0
+            ).to(Enr(some, nodeId9s))
+        )
+        assertEquals(
+            256, Enr(
+                some,
+                nodeId0
+            ).to(Enr(some, nodeIdfs))
+        )
+        assertEquals(
+            255, Enr(
+                some,
+                nodeId9s
+            ).to(Enr(some, nodeIdfs))
+        )
     }
 
     @Test
@@ -58,33 +75,47 @@ class EnrTests {
         val nodeIdfs = PeerId.fromHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
         val some = Multiaddr("/ip4/127.0.0.1/tcp/1234")
         val divisor: Int = 8
-        assertEquals(0, Enr(
-            some,
-            nodeId1a
-        ).simTo(Enr(some, nodeId1a), divisor))
-        assertEquals(1, Enr(
-            some,
-            nodeId0
-        ).simTo(Enr(some, nodeId1a), divisor))
-        assertEquals(32, Enr(
-            some,
-            nodeId0
-        ).simTo(Enr(some, nodeId1b), divisor))
-        assertEquals(32, Enr(
-            some,
-            nodeId0
-        ).simTo(Enr(some, nodeId1s), divisor))
-        assertEquals(32, Enr(
-            some,
-            nodeId0
-        ).simTo(Enr(some, nodeId9s), divisor))
-        assertEquals(32, Enr(
-            some,
-            nodeId0
-        ).simTo(Enr(some, nodeIdfs), divisor))
-        assertEquals(32, Enr(
-            some,
-            nodeId9s
-        ).simTo(Enr(some, nodeIdfs), divisor))
+        assertEquals(
+            0, Enr(
+                some,
+                nodeId1a
+            ).simTo(Enr(some, nodeId1a), divisor)
+        )
+        assertEquals(
+            1, Enr(
+                some,
+                nodeId0
+            ).simTo(Enr(some, nodeId1a), divisor)
+        )
+        assertEquals(
+            32, Enr(
+                some,
+                nodeId0
+            ).simTo(Enr(some, nodeId1b), divisor)
+        )
+        assertEquals(
+            32, Enr(
+                some,
+                nodeId0
+            ).simTo(Enr(some, nodeId1s), divisor)
+        )
+        assertEquals(
+            32, Enr(
+                some,
+                nodeId0
+            ).simTo(Enr(some, nodeId9s), divisor)
+        )
+        assertEquals(
+            32, Enr(
+                some,
+                nodeId0
+            ).simTo(Enr(some, nodeIdfs), divisor)
+        )
+        assertEquals(
+            32, Enr(
+                some,
+                nodeId9s
+            ).simTo(Enr(some, nodeIdfs), divisor)
+        )
     }
 }

@@ -18,10 +18,18 @@ val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val K_BUCKET = 16
 val DISTANCE_DIVISOR = 1
 
+
+/**
+ * Executing neighborhood lookup functions on deterministic set of Kademlia tables
+ */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class KademliaTableTests {
     lateinit var table: KademliaTable
 
+    /**
+     * Generate 100 nodes, first is going to be home node,
+     * others will be used to fill Kademlia `table` for this node.
+     */
     @BeforeAll
     internal fun setup() {
         val peers = (0 until (100)).map {

@@ -11,11 +11,19 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 
+/**
+ * Similar to [KademliaTableTests] executing neighborhood lookup functions on deterministic set of nodes
+ * but doing it on higher level of abstraction, on [Node] instances testing full lookup cycle
+ */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class NodeTests {
-    lateinit var node: Node
-    var otherNodeMap: MutableMap<Int, Node> = HashMap()
+    private lateinit var node: Node
+    private var otherNodeMap: MutableMap<Int, Node> = HashMap()
 
+    /**
+     * Generate 100 nodes, first is going to be `node`, others will be used to fill its Kademlia table.
+     * After that generate set of peers, each on different distance from `node` covering distances from 245 to 256.
+     */
     @BeforeAll
     internal fun setup() {
         val peers = (0 until (100)).map {
