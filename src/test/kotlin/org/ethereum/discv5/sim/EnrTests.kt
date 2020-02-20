@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
- * Node distance [Node.to] and its reduced version [Node.simTo] tests
+ * Node distance [Enr.to] and its reduced version [Enr.simTo] tests
  */
 class EnrTests {
     @Test
