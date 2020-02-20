@@ -1,6 +1,6 @@
 # Discovery v5 simulations
 
-[Simulator](blob/master/src/main/kotlin/org/ethereum/discv5/Simulator.kt) for different Kademlia peer neighborhood lookups: 
+[Simulator](src/main/kotlin/org/ethereum/discv5/Simulator.kt) for different Kademlia peer neighborhood lookups: 
 - V5 `Node.findNodesStrict`
 - V4/Kademlia  `Node.findNeighbors` 
 - Experimental `Node.findNodesDown`
