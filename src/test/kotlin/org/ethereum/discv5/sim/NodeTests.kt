@@ -34,9 +34,9 @@ class NodeTests {
                 addr,
                 PeerId(KeyUtils.privToPubCompressed(privKey))
             )
-            Node(enr, privKey)
+            Node(enr, privKey, RANDOM)
         }
-        node = Node(peers[0].enr, peers[0].privKey)
+        node = Node(peers[0].enr, peers[0].privKey, RANDOM)
         peers.subList(1, peers.size).map { it.enr }.forEach { node.table.put(it) }
         while ((245..256).subtract(otherNodeMap.keys).isNotEmpty()) {
             val privKey = KeyUtils.genPrivKey(RANDOM)
@@ -45,7 +45,8 @@ class NodeTests {
             otherNodeMap.computeIfAbsent(distance) {
                 Node(
                     Enr(Multiaddr("/ip4/127.0.0.2/tcp/${distance - 1}"), peerId),
-                    privKey
+                    privKey,
+                    RANDOM
                 )
             }
         }

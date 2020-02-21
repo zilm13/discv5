@@ -1,25 +1,23 @@
 package org.ethereum.discv5.core
 
-import io.libp2p.core.PeerId
 import io.libp2p.core.crypto.PrivKey
 import io.libp2p.core.multiformats.Multiaddr
-import org.ethereum.discv5.util.KeyUtils
 import org.ethereum.discv5.util.MessageSizeEstimator
-import java.security.SecureRandom
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.Random
 
 val K_BUCKET = 16
 val BUCKETS_COUNT = 256
 val DISTANCE_DIVISOR = 1 // Reduces number of possible distances with numbers greater than 1
 
 
-data class Node(val enr: Enr, val privKey: PrivKey) {
+data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random) {
     val table = KademliaTable(
         enr,
         K_BUCKET,
         BUCKETS_COUNT,
         DISTANCE_DIVISOR,
-        listOf()
+        listOf(),
+        rnd
     )
     val outgoingMessages: MutableList<Int> = ArrayList()
     val incomingMessages: MutableList<Int> = ArrayList()
@@ -29,6 +27,10 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
         incomingMessages.clear()
     }
 
+    /**
+     * @return peers surrounding [other] using [KademliaTable.findStrict]
+     * to match Discovery V5 spec.
+     */
     fun findNodesStrict(other: Node): List<Enr> {
         val startNode = Enr(Multiaddr(ByteArray(0)), enr.id)
         val startBucket = other.enr.simTo(enr, DISTANCE_DIVISOR)
@@ -61,6 +63,9 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
         return res
     }
 
+    /**
+     * @return peers surrounding [other] using [KademliaTable.findDown]. Experimental.
+     */
     fun findNodesDown(other: Node): List<Enr> {
         val startNode = Enr(Multiaddr(ByteArray(0)), enr.id)
         val startBucket = other.enr.simTo(enr, DISTANCE_DIVISOR)
@@ -110,35 +115,14 @@ data class Node(val enr: Enr, val privKey: PrivKey) {
         return res
     }
 
+    /**
+     * @return peers surrounding [other] like in original Kademlia
+     * find neighbors implementation
+     */
     fun findNeighbors(other: Node): List<Enr> {
         outgoingMessages.add(MessageSizeEstimator.getNeighborsSize())
         val nodes = other.table.findNeighbors(enr.id)
         incomingMessages.addAll(MessageSizeEstimator.getNodesSize(nodes.size))
         return nodes
-    }
-
-    companion object {
-        private var ipCounter = AtomicInteger(1)
-        private var rnd = SecureRandom(ByteArray(1) { 1.toByte() })
-
-        fun create(): Node {
-            val ip = newIp()
-            val privKey =
-                KeyUtils.genPrivKey(rnd)
-            val addr = Multiaddr("/ip4/$ip/tcp/30303")
-            val enr = Enr(
-                addr,
-                PeerId(KeyUtils.privToPubCompressed(privKey))
-            )
-            return Node(enr, privKey)
-        }
-
-        private fun newIp(): String {
-            val ip = ipCounter.getAndIncrement()
-            return "" + ip.shr(24) +
-                    "." + ip.shr(16).and(0xFF) +
-                    "." + ip.shr(8).and(0xFF) +
-                    "." + ip.and(0xFF)
-        }
     }
 }

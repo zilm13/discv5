@@ -4,28 +4,54 @@ import io.libp2p.core.PeerId
 import io.libp2p.core.multiformats.Multiaddr
 import java.lang.Integer.min
 import java.util.LinkedList
+import java.util.Random
 
+/**
+ * Enr storage with custom properties according to Kademlia protocol
+ * See [put]
+ */
 class Bucket(
     private val maxSize: Int,
     private val payload: LinkedList<Enr> = LinkedList()
 ) : List<Enr> by payload {
-    fun put(enr: Enr) {
+
+    /**
+     * Puts enr to the tail of bucket. If enr is already in bucket,
+     * it's moved from its current position to tail. If bucket is already full,
+     * in original Kademlia we test head candidate, whether its alive.
+     * If yes, enr is dropped, otherwise head is removed and enr is added to the tail.
+     *
+     * For simulation purposes we use Random.nextBoolean to check whether head is alive.
+     * It would be more realistic if the chance of dropping peer will decrease with
+     * each check (peer which is online for 2 hours will be more likely online in an hour
+     * than the peer which is online for 1 hour) but such simulation could be very
+     * complex and set aside for further improvements of simulation
+     */
+    fun put(enr: Enr, rnd: Random) {
         if (contains(enr)) {
             payload.remove(enr)
         }
-        if (size == maxSize) {
+        if (size == maxSize && rnd.nextBoolean()) {
             payload.removeLast()
         }
-        payload.add(enr)
+        if (size < maxSize) {
+            payload.add(enr)
+        }
     }
 }
 
+/**
+ * Kademlia table according to original Kademlia protocol
+ * There is a simulation feature configured by [distanceDivisor]:
+ * it reduces number of possible buckets and distances
+ */
 class KademliaTable(
     val home: Enr,
     private val bucketSize: Int,
     private val numberBuckets: Int,
     private val distanceDivisor: Int,
-    private val bootNodes: Collection<Enr> = ArrayList()
+    bootNodes: Collection<Enr> = ArrayList(),
+    private val rnd: Random
 ) {
     private val buckets: MutableMap<Int, Bucket> = HashMap()
 
@@ -38,11 +64,12 @@ class KademliaTable(
             return
         }
         val distance = home.simTo(enr, distanceDivisor)
-        buckets.computeIfAbsent(distance) { Bucket(bucketSize) }.put(enr)
+        buckets.computeIfAbsent(distance) { Bucket(bucketSize) }.put(enr, rnd)
     }
 
     /**
-     * @return up to limit ENRs starting from startBucket and going down until 1st bucket is reached
+     * @return up to limit ENRs starting from startBucket and going down
+     * until bucketSize peers found or 1st bucket is reached
      */
     fun findDown(startBucket: Int, limit: Int = bucketSize): List<Enr> {
         if (startBucket == 0) {
@@ -118,6 +145,10 @@ class KademliaTable(
     }
 
     companion object {
+        /**
+         * Sorts [candidates] by distance from [center] and
+         * puts them in [neighbors] up to [limit] size for this collection
+         */
         fun filterNeighborhood(
             center: Enr,
             neighbors: MutableList<Enr>,

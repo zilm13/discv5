@@ -9,12 +9,11 @@ import org.ethereum.discv5.core.Node
 import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
 import org.ethereum.discv5.util.formatTable
-import java.security.SecureRandom
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 val PEER_COUNT = 1_000
-val RANDOM : InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
+val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val ROUNDTRIP_MS = 100
 
@@ -28,7 +27,7 @@ fun main(args: Array<String>) {
             addr,
             PeerId(KeyUtils.privToPubCompressed(privKey))
         )
-        Node(enr, privKey)
+        Node(enr, privKey, RANDOM)
     }
     val peersMap = peers.map { it.enr to it }.toMap()
 
@@ -59,37 +58,33 @@ fun main(args: Array<String>) {
     val trafficFindNodeStrict = gatherTrafficStats(peers)
     val latencyFindNodeStrict = gatherLatencyStats(peers)
     peers.forEach(Node::resetStats)
+    println("trafficFindNodeStrict")
+    trafficFindNodeStrict.forEach { println(it) }
+    println("latencyFindNodeStrict")
+    latencyFindNodeStrict.forEach { println(it) }
 
     println("Run simulation with FINDNODE(peerId) API method similar to original Kademlia protocol")
     runFindNeighborsSimulation(peers, peersMap)
     val trafficFindNeighbors = gatherTrafficStats(peers)
     val latencyFindNeighbors = gatherLatencyStats(peers)
     peers.forEach(Node::resetStats)
-
-//    FIXME
-//    runFindNodesDownSimulation(peers, peersMap)
-
-    println("trafficFindNodeStrict")
-    trafficFindNodeStrict.forEach { println(it) }
-
-    println("latencyFindNodeStrict")
-    latencyFindNodeStrict.forEach { println(it) }
-
     println("trafficFindNeighbors")
     trafficFindNeighbors.forEach { println(it) }
-
     println("latencyFindNeighbors")
     latencyFindNeighbors.forEach { println(it) }
 
-//    println("Gathering statistics")
-//    val header = "Peer #\t Traffic\n"
-//    val stats = peers.mapIndexed { index, peer ->
-//        Pair(index.toString(),calcTraffic(
-//            peer
-//        ))
-//    }.sortedBy { pair -> pair.second }.map {pair -> pair.first + "\t" + pair.second}.joinToString("\n")
-//    println((header + stats).formatTable(true))
-
+    println(
+        "Run simulation with FINDNODE(peerId) API experimental method improving Discovery V5 by " +
+                "returning records from <= of requested distance"
+    )
+    runFindNodesDownSimulation(peers, peersMap)
+    val trafficFindNodesDown = gatherTrafficStats(peers)
+    val latencyFindNodesDown = gatherLatencyStats(peers)
+    peers.forEach(Node::resetStats)
+    println("trafficFindNodesDown")
+    trafficFindNodesDown.forEach { println(it) }
+    println("latencyFindNodesDown")
+    latencyFindNodesDown.forEach { println(it) }
 }
 
 fun gatherTrafficStats(peers: List<Node>): List<Int> {
