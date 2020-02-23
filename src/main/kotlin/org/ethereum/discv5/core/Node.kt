@@ -83,15 +83,19 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random) {
                     incomingMessages.addAll(MessageSizeEstimator.getNodesSize(enrs.size))
                     if (enrs.isNotEmpty()) {
                         val lastDistance = enrs.last().simTo(other.enr, DISTANCE_DIVISOR)
-                        val lastBucketNottFull = enrs.size == K_BUCKET && lastDistance != bottomBucket
+                        val lastBucketNotFull = enrs.size == K_BUCKET && lastDistance != bottomBucket
                         var enrsWDistance = enrs.map { Pair(it.simTo(other.enr, DISTANCE_DIVISOR), it) }
-                        if (lastBucketNottFull) {
+                        if (lastBucketNotFull) {
                             enrsWDistance = enrsWDistance.filter { it.first != lastDistance }
+                        } else if (enrs.size < K_BUCKET) { // so we are over with nodes in table, fill everything else with 0's
+                            (1 until lastDistance).forEach { fullBucketsCache[it] = listOf() }
                         }
                         enrsWDistance.groupBy { it.first }.forEach { bucket, pairsList ->
                             fullBucketsCache[bucket] =
                                 pairsList.map { it.second }
                         }
+                    } else {
+                        (1..bottomBucket).forEach { fullBucketsCache[it] = listOf() }
                     }
                 }
                 fullBucketsCache[bottomBucket]?.forEach { candidates.add(it) }
