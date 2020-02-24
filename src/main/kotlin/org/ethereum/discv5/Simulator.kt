@@ -12,7 +12,7 @@ import org.ethereum.discv5.util.formatTable
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-val PEER_COUNT = 1_000
+val PEER_COUNT = 10_000
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val ROUNDTRIP_MS = 100
@@ -31,16 +31,18 @@ fun main(args: Array<String>) {
     }
     val peersMap = peers.map { it.enr to it }.toMap()
 
-    println("Calculating distribution of peer tables fullness")
     // It's believed that p2p node uptime is complied with Pareto distribution
     // See Stefan Saroiu, Krishna P. Gummadi, Steven D. Gribble "A Measurement Study of Peer-to-Peer File Sharing Systems"
     // https://www.researchgate.net/publication/2854843_A_Measurement_Study_of_Peer-to-Peer_File_Sharing_Systems
     // For simulations lets assume that it's Pareto with alpha = 0.18 and xm = 1.
     // With such distribution 40% of peers are mature enough to pass through its Kademlia table all peers in network.
+    val alpha = 0.18
+    val xm = 1.0
+    println("""Calculating distribution of peer tables fullness with alpha = $alpha and Xm = $xm""")
     val peerDistribution = calcPeerDistribution(
         PEER_COUNT,
-        0.18,
-        1.0,
+        alpha,
+        xm,
         240.0
     )
     assert(peers.size == peerDistribution.size)
@@ -52,6 +54,7 @@ fun main(args: Array<String>) {
         }
     }
 //    printKademliaTableStats(peers)
+//    System.exit(-1)
 
     println("Run simulation with FINDNODE(distance) API method according to Discovery V5 protocol")
     runFindNodesStrictSimulation(peers, peersMap)
@@ -148,11 +151,11 @@ fun calcKademliaPeers(table: KademliaTable): Int {
 }
 
 fun calcPeerDistribution(count: Int, alpha: Double, xm: Double, xFull: Double): List<Int> {
-    val step = 0.01 // 100 Steps
+    val step = 10.0 / count
     val res: MutableList<Int> = ArrayList()
     val distribution = calcDistribution(step, alpha, xm, xFull)
     (0 until count).chunked((count * step).toInt()).forEachIndexed { index, chunk ->
-        chunk.map { res.add((distribution[index] * count / xFull).roundToInt()) }
+        chunk.map { res.add((distribution[index] * count * 1000 / (xFull * count)).roundToInt()) }
     }
     return res
 }
