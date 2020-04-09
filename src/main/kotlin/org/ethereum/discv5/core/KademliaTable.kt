@@ -4,7 +4,6 @@ import io.libp2p.core.PeerId
 import io.libp2p.core.multiformats.Multiaddr
 import java.lang.Integer.min
 import java.util.LinkedList
-import java.util.Random
 
 /**
  * Enr storage with custom properties according to Kademlia protocol
@@ -20,23 +19,21 @@ class Bucket(
      * it's moved from its current position to tail. If bucket is already full,
      * in original Kademlia we test head candidate, whether its alive.
      * If yes, enr is dropped, otherwise head is removed and enr is added to the tail.
-     *
-     * For simulation purposes we use Random.nextBoolean to check whether head is alive.
-     * It would be more realistic if the chance of dropping peer will decrease with
-     * each check (peer which is online for 2 hours will be more likely online in an hour
-     * than the peer which is online for 1 hour) but such simulation could be very
-     * complex and set aside for further improvements of simulation
      */
-    fun put(enr: Enr, rnd: Random) {
+    fun put(enr: Enr, liveCheck: (Enr) -> Boolean) {
         if (contains(enr)) {
             payload.remove(enr)
         }
-        if (size == maxSize && rnd.nextBoolean()) {
+        if (size == maxSize && !liveCheck(payload.peekLast())) {
             payload.removeLast()
         }
         if (size < maxSize) {
             payload.add(enr)
         }
+    }
+
+    fun remove(enr: Enr): Boolean {
+        return payload.remove(enr)
     }
 }
 
@@ -50,21 +47,21 @@ class KademliaTable(
     private val bucketSize: Int,
     private val numberBuckets: Int,
     private val distanceDivisor: Int,
-    bootNodes: Collection<Enr> = ArrayList(),
-    private val rnd: Random
+    private val liveCheck: (Enr) -> Boolean,
+    bootNodes: Collection<Enr> = ArrayList()
 ) {
     private val buckets: MutableMap<Int, Bucket> = HashMap()
 
     init {
-        bootNodes.forEach { put(it) }
+        bootNodes.forEach { put(it, liveCheck) }
     }
 
-    fun put(enr: Enr) {
+    fun put(enr: Enr, liveCheck: (Enr) -> Boolean) {
         if (home == enr) {
             return
         }
         val distance = home.simTo(enr, distanceDivisor)
-        buckets.computeIfAbsent(distance) { Bucket(bucketSize) }.put(enr, rnd)
+        buckets.computeIfAbsent(distance) { Bucket(bucketSize) }.put(enr, liveCheck)
     }
 
     /**
@@ -142,6 +139,11 @@ class KademliaTable(
     fun exists(enr: Enr): Boolean {
         val distance = home.simTo(enr, distanceDivisor)
         return buckets[distance]?.find { it == enr }?.let { true } ?: false
+    }
+
+    fun remove(enr: Enr): Boolean {
+        val distance = home.simTo(enr, distanceDivisor)
+        return buckets[distance]?.remove(enr) ?: false
     }
 
     companion object {

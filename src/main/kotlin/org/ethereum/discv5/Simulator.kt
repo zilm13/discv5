@@ -6,19 +6,21 @@ import org.ethereum.discv5.core.BUCKETS_COUNT
 import org.ethereum.discv5.core.Enr
 import org.ethereum.discv5.core.KademliaTable
 import org.ethereum.discv5.core.Node
+import org.ethereum.discv5.core.Router
 import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
 import org.ethereum.discv5.util.formatTable
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-val PEER_COUNT = 10_000
+val PEER_COUNT = 100
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val ROUNDTRIP_MS = 100
 
 fun main(args: Array<String>) {
     println("Creating private key - enr pairs for $PEER_COUNT nodes")
+    val router = Router()
     val peers = (0 until (PEER_COUNT)).map {
         val ip = "127.0.0.1"
         val privKey = KeyUtils.genPrivKey(RANDOM)
@@ -27,7 +29,9 @@ fun main(args: Array<String>) {
             addr,
             PeerId(KeyUtils.privToPubCompressed(privKey))
         )
-        Node(enr, privKey, RANDOM)
+        Node(enr, privKey, RANDOM, router).apply {
+            router.register(this)
+        }
     }
     val peersMap = peers.map { it.enr to it }.toMap()
 
@@ -48,7 +52,8 @@ fun main(args: Array<String>) {
     assert(peers.size == peerDistribution.size)
     println("Filling peer's Kademlia tables according to distribution")
     peers.forEachIndexed() { index, peer ->
-        (1..peerDistribution[index]).map { peers[RANDOM.nextInt(PEER_COUNT)] }.forEach { peer.table.put(it.enr) }
+        (1..peerDistribution[index]).map { peers[RANDOM.nextInt(PEER_COUNT)] }
+            .forEach { peer.table.put(it.enr) { true } }
         if (index > 0 && index % 1000 == 0) {
             println("$index peer tables filled")
         }
@@ -60,7 +65,7 @@ fun main(args: Array<String>) {
     runFindNodesStrictSimulation(peers, peersMap)
     val trafficFindNodeStrict = gatherTrafficStats(peers)
     val latencyFindNodeStrict = gatherLatencyStats(peers)
-    peers.forEach(Node::resetStats)
+    peers.forEach(Node::resetAll)
     println("trafficFindNodeStrict")
     trafficFindNodeStrict.forEach { println(it) }
     println("latencyFindNodeStrict")
@@ -70,7 +75,7 @@ fun main(args: Array<String>) {
     runFindNeighborsSimulation(peers, peersMap)
     val trafficFindNeighbors = gatherTrafficStats(peers)
     val latencyFindNeighbors = gatherLatencyStats(peers)
-    peers.forEach(Node::resetStats)
+    peers.forEach(Node::resetAll)
     println("trafficFindNeighbors")
     trafficFindNeighbors.forEach { println(it) }
     println("latencyFindNeighbors")
@@ -83,7 +88,7 @@ fun main(args: Array<String>) {
     runFindNodesDownSimulation(peers, peersMap)
     val trafficFindNodesDown = gatherTrafficStats(peers)
     val latencyFindNodesDown = gatherLatencyStats(peers)
-    peers.forEach(Node::resetStats)
+    peers.forEach(Node::resetAll)
     println("trafficFindNodesDown")
     trafficFindNodesDown.forEach { println(it) }
     println("latencyFindNodesDown")
@@ -110,15 +115,15 @@ fun runFindNeighborsSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, roun
     runSimulationImpl({ node, anotherNode -> node.findNeighbors(anotherNode) }, peers, peersMap, rounds)
 }
 
-fun runSimulationImpl(nodeTask: (Node, Node) -> Unit, peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int) {
+fun runSimulationImpl(nodeTask: (Node, Enr) -> List<Enr>, peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int) {
+    peers.forEach {
+        it.initTasks { enr ->
+            nodeTask(it, enr)
+        }
+    }
     for (i in 0 until rounds) {
         println("Simulating round #${i + 1}")
-        peers.forEach {
-            val allEnrs = it.table.findAll()
-            val nextEnr = allEnrs[i % allEnrs.size]
-            val nextNode: Node = peersMap[nextEnr]!!
-            nodeTask(it, nextNode)
-        }
+        peers.forEach(Node::step)
     }
 }
 
