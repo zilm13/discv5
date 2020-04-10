@@ -54,8 +54,7 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             currentRadius++
         }
 
-        // TODO: update message size estimator
-        outgoingMessages.add(MessageSizeEstimator.getFindNodesSize())
+        outgoingMessages.add(MessageSizeEstimator.getFindNodesSize(buckets.size))
         // TODO: make router forward messages between instances and put message measurement in it
         return router.route(other)?.handleFindNodesStrict(buckets.toList(), enr)?.also {
             incomingMessages.addAll(MessageSizeEstimator.getNodesSize(it.size))
@@ -64,7 +63,7 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     private fun handleFindNodesStrict(buckets: List<Int>, initiator: Enr): List<Enr> {
         return table.findStrict(buckets).stream().limit(K_BUCKET.toLong()).toList().also {
-            incomingMessages.add(MessageSizeEstimator.getFindNodesSize())
+            incomingMessages.add(MessageSizeEstimator.getFindNodesSize(buckets.size))
             outgoingMessages.addAll(MessageSizeEstimator.getNodesSize(it.size))
             table.put(initiator, this::ping)
         }

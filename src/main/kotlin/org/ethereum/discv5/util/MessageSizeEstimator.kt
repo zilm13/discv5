@@ -8,19 +8,10 @@ interface MessageSizeEstimator {
 
     companion object {
         private val findNodesSizeEstimator = FindNodesSizeEstimator()
-        private val findNodesDownSizeEstimator = FindNodesDownSizeEstimator()
-        private val findNeighborsSizeEstimator = FindNeighborsSizeEstimator()
         private val nodesSizeEstimator = NodesSizeEstimator()
-        fun getFindNodesSize(): Int {
-            return findNodesSizeEstimator.estimate()
-        }
 
-        fun getFindNodesDownSize(): Int {
-            return findNodesDownSizeEstimator.estimate()
-        }
-
-        fun getNeighborsSize(): Int {
-            return findNeighborsSizeEstimator.estimate()
+        fun getFindNodesSize(count: Int): Int {
+            return findNodesSizeEstimator.estimate(count)
         }
 
         fun getNodesSize(nodesCount: Int): List<Int> {
@@ -35,27 +26,7 @@ interface MessageSizeEstimator {
  */
 class FindNodesSizeEstimator : MessageSizeEstimator {
     override fun estimate(input: Int): Int {
-        return 73
-    }
-}
-
-
-/**
- * Estimates FindNodeDown size. Value is taken from implementation
- */
-class FindNodesDownSizeEstimator : MessageSizeEstimator {
-    override fun estimate(input: Int): Int {
-        return 73
-    }
-}
-
-
-/**
- * Estimates FindNeighbors size. Value is taken from implementation
- */
-class FindNeighborsSizeEstimator : MessageSizeEstimator {
-    override fun estimate(input: Int): Int {
-        return 105
+        return 72 + input
     }
 }
 
