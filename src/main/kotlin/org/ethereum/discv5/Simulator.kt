@@ -33,7 +33,6 @@ fun main(args: Array<String>) {
             router.register(this)
         }
     }
-    val peersMap = peers.map { it.enr to it }.toMap()
 
     // It's believed that p2p node uptime is complied with Pareto distribution
     // See Stefan Saroiu, Krishna P. Gummadi, Steven D. Gribble "A Measurement Study of Peer-to-Peer File Sharing Systems"
@@ -61,8 +60,8 @@ fun main(args: Array<String>) {
 //    printKademliaTableStats(peers)
 //    System.exit(-1)
 
-    println("Run simulation with FINDNODE(distance) API method according to Discovery V5 protocol")
-    runFindNodesStrictSimulation(peers, peersMap)
+    println("Run simulation with FINDNODE(distances) API method according to updated Discovery V5 protocol")
+    runSimulationImpl(peers, ROUNDS_COUNT)
     val trafficFindNodeStrict = gatherTrafficStats(peers)
     val latencyFindNodeStrict = gatherLatencyStats(peers)
     peers.forEach(Node::resetAll)
@@ -70,29 +69,6 @@ fun main(args: Array<String>) {
     trafficFindNodeStrict.forEach { println(it) }
     println("latencyFindNodeStrict")
     latencyFindNodeStrict.forEach { println(it) }
-
-    println("Run simulation with FINDNODE(peerId) API method similar to original Kademlia protocol")
-    runFindNeighborsSimulation(peers, peersMap)
-    val trafficFindNeighbors = gatherTrafficStats(peers)
-    val latencyFindNeighbors = gatherLatencyStats(peers)
-    peers.forEach(Node::resetAll)
-    println("trafficFindNeighbors")
-    trafficFindNeighbors.forEach { println(it) }
-    println("latencyFindNeighbors")
-    latencyFindNeighbors.forEach { println(it) }
-
-    println(
-        "Run simulation with FINDNODE(peerId) API experimental method improving Discovery V5 by " +
-                "returning records from <= of requested distance"
-    )
-    runFindNodesDownSimulation(peers, peersMap)
-    val trafficFindNodesDown = gatherTrafficStats(peers)
-    val latencyFindNodesDown = gatherLatencyStats(peers)
-    peers.forEach(Node::resetAll)
-    println("trafficFindNodesDown")
-    trafficFindNodesDown.forEach { println(it) }
-    println("latencyFindNodesDown")
-    latencyFindNodesDown.forEach { println(it) }
 }
 
 fun gatherTrafficStats(peers: List<Node>): List<Int> {
@@ -103,24 +79,8 @@ fun gatherLatencyStats(peers: List<Node>): List<Int> {
     return peers.map { calcTotalTime(it) }.sorted()
 }
 
-fun runFindNodesStrictSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int = ROUNDS_COUNT) {
-    runSimulationImpl({ node, anotherNode -> node.findNodesStrict(anotherNode) }, peers, peersMap, rounds)
-}
-
-fun runFindNodesDownSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int = ROUNDS_COUNT) {
-    runSimulationImpl({ node, anotherNode -> node.findNodesDown(anotherNode) }, peers, peersMap, rounds)
-}
-
-fun runFindNeighborsSimulation(peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int = ROUNDS_COUNT) {
-    runSimulationImpl({ node, anotherNode -> node.findNeighbors(anotherNode) }, peers, peersMap, rounds)
-}
-
-fun runSimulationImpl(nodeTask: (Node, Enr) -> List<Enr>, peers: List<Node>, peersMap: Map<Enr, Node>, rounds: Int) {
-    peers.forEach {
-        it.initTasks { enr ->
-            nodeTask(it, enr)
-        }
-    }
+fun runSimulationImpl(peers: List<Node>, rounds: Int) {
+    peers.forEach(Node::initTasks)
     for (i in 0 until rounds) {
         println("Simulating round #${i + 1}")
         peers.forEach(Node::step)
