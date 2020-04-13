@@ -5,11 +5,13 @@ import io.libp2p.core.multiformats.Multiaddr
 import org.ethereum.discv5.core.BUCKETS_COUNT
 import org.ethereum.discv5.core.Enr
 import org.ethereum.discv5.core.KademliaTable
+import org.ethereum.discv5.core.MetaKey
 import org.ethereum.discv5.core.Node
 import org.ethereum.discv5.core.Router
 import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
 import org.ethereum.discv5.util.formatTable
+import java.math.BigInteger
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -63,13 +65,14 @@ fun main(args: Array<String>) {
 
     println("Run simulation with FINDNODE(distances) API method according to updated Discovery V5 protocol")
     runSimulationImpl(peers, ROUNDS_COUNT)
-    val trafficFindNodeStrict = gatherTrafficStats(peers)
-    val latencyFindNodeStrict = gatherLatencyStats(peers)
+    printSubnetPeersStats(peers)
+//    val trafficFindNodeStrict = gatherTrafficStats(peers)
+//    val latencyFindNodeStrict = gatherLatencyStats(peers)
     peers.forEach(Node::resetAll)
-    println("trafficFindNodeStrict")
-    trafficFindNodeStrict.forEach { println(it) }
-    println("latencyFindNodeStrict")
-    latencyFindNodeStrict.forEach { println(it) }
+//    println("trafficFindNodeStrict")
+//    trafficFindNodeStrict.forEach { println(it) }
+//    println("latencyFindNodeStrict")
+//    latencyFindNodeStrict.forEach { println(it) }
 }
 
 fun gatherTrafficStats(peers: List<Node>): List<Int> {
@@ -81,11 +84,42 @@ fun gatherLatencyStats(peers: List<Node>): List<Int> {
 }
 
 fun runSimulationImpl(peers: List<Node>, rounds: Int) {
+    assert(rounds > 50)
     peers.forEach(Node::initTasks)
-    for (i in 0 until rounds) {
+    for (i in 0 until 50) {
         println("Simulating round #${i + 1}")
         peers.forEach(Node::step)
     }
+    val subnetPart = 10
+    println("Making $subnetPart% of peers with ENR from subnet")
+    peers.shuffled(RANDOM).take(peers.size * subnetPart / 100).forEach {
+        it.updateEnr(
+            it.enr.seq.inc(),
+            HashMap<ByteArray, ByteArray>().apply {
+                put(MetaKey.SUBNET.of, ByteArray(1) { 13.toByte() })
+            }
+        )
+    }
+    for (i in 51 until rounds) {
+        println("Simulating round #${i + 1}")
+        peers.forEach(Node::step)
+    }
+}
+
+fun printSubnetPeersStats(peers: List<Node>) {
+    val subnetIds = peers.filter { it.enr.seq == BigInteger.valueOf(2) }.map { it.enr.id }.toSet()
+    println("Peer knowledge stats")
+    println("===================================")
+    val header = "Peer #\t Subnet\t Known peers from subnet\n"
+    val stats = peers.map { peer ->
+        peer.enr.id.toHex().substring(0, 6) + "\t" +
+                (peer.enr.seq == BigInteger.valueOf(2)).let { if (it) "X" else " " } + "\t" +
+                peer.table.findAll()
+                    .filter { subnetIds.contains(it.id) }
+                    .map { it.id.toHex().substring(0, 6) + "(" + it.seq + ")" }
+                    .joinToString(", ")
+    }.joinToString("\n")
+    println((header + stats).formatTable(true))
 }
 
 fun printKademliaTableStats(peers: List<Node>) {

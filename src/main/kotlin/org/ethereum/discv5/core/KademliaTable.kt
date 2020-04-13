@@ -30,7 +30,7 @@ class Bucket(
         }
     }
 
-    private fun containsById(id: PeerId): Boolean {
+    internal fun containsById(id: PeerId): Boolean {
         return payload.find { it.id == id } != null
     }
 
@@ -102,7 +102,7 @@ class KademliaTable(
 
     fun exists(enr: Enr): Boolean {
         val distance = home.simTo(enr, distanceDivisor)
-        return buckets[distance]?.find { it == enr }?.let { true } ?: false
+        return buckets[distance]?.containsById(enr.id) ?: false
     }
 
     fun remove(enr: Enr): Boolean {

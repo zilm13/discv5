@@ -13,6 +13,10 @@ import kotlin.experimental.xor
 val DEFAULT_SEQ: BigInteger = BigInteger.ONE
 val DEFAULT_META: Map<ByteArray, ByteArray> = HashMap()
 
+enum class MetaKey(val of: ByteArray) {
+    SUBNET(ByteArray(1) { 1.toByte() })
+}
+
 /**
  * Ethereum Node Record
  * Doesn't comply with https://eips.ethereum.org/EIPS/eip-778 but contains all fields required for simulation

@@ -1,6 +1,7 @@
 package org.ethereum.discv5.core
 
 import io.libp2p.core.crypto.PrivKey
+import io.libp2p.etc.types.copy
 import java.math.BigInteger
 import java.util.Random
 import kotlin.math.roundToInt
@@ -38,7 +39,9 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     fun step(): Unit {
         tasks.removeAll { it.isOver() }
-        tasks.forEach { it.step() }
+        // XXX: new tasks could be added during any step but we shouldn't change current tasks
+        val thisStepTasks = tasks.copy()
+        thisStepTasks.forEach { it.step() }
     }
 
     fun resetAll() {
