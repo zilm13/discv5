@@ -6,31 +6,67 @@ import com.google.protobuf.UnknownFieldSet
 import io.libp2p.core.PeerId
 import io.libp2p.core.multiformats.Multiaddr
 import java.io.ByteArrayOutputStream
+import java.math.BigInteger
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.experimental.xor
+
+val DEFAULT_SEQ: BigInteger = BigInteger.ONE
+val DEFAULT_META: Map<ByteArray, ByteArray> = HashMap()
 
 /**
  * Ethereum Node Record
+ * Doesn't comply with https://eips.ethereum.org/EIPS/eip-778 but contains all fields required for simulation
  */
-data class Enr(val addr: Multiaddr, val id: PeerId) {
-    private constructor(pair: Pair<Multiaddr, PeerId>) : this(pair.first, pair.second)
+data class Enr(val addr: Multiaddr, val id: PeerId, val seq: BigInteger, val meta: Map<ByteArray, ByteArray>) {
+    private constructor(quartet: Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArray, ByteArray>>) :
+            this(quartet.first, quartet.second, quartet.third, quartet.forth)
+
+    constructor(addr: Multiaddr, id: PeerId) : this(addr, id, DEFAULT_SEQ, DEFAULT_META)
+
     constructor(bytes: ByteArray) : this(fromBytes(bytes))
+
+    data class Quartet<T1, T2, T3, T4>(val first: T1, val second: T2, val third: T3, val forth: T4)
 
     fun getBytes(): ByteArray {
         val baos = ByteArrayOutputStream()
         val out: CodedOutputStream = CodedOutputStream.newInstance(baos)
         out.writeByteArray(1, addr.getBytes())
         out.writeByteArray(2, id.bytes)
+        out.writeByteArray(3, seq.toByteArray())
+        val mapBaos = ByteArrayOutputStream()
+        val mapOut: CodedOutputStream = CodedOutputStream.newInstance(mapBaos)
+        val counter = AtomicInteger(1)
+        meta.forEach { (key, value) ->
+            run {
+                mapOut.writeByteArray(counter.getAndIncrement(), key)
+                mapOut.writeByteArray(counter.getAndIncrement(), value)
+            }
+        }
+        mapOut.flush()
+        out.writeByteArray(4, mapBaos.toByteArray())
         out.flush()
         return baos.toByteArray()
     }
 
     companion object {
-        private fun fromBytes(bytes: ByteArray): Pair<Multiaddr, PeerId> {
+        private fun fromBytes(bytes: ByteArray): Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArray, ByteArray>> {
             val inputStream: CodedInputStream = CodedInputStream.newInstance(bytes)
             val fields: UnknownFieldSet = UnknownFieldSet.parseFrom(inputStream)
             val addrBytes = fields.getField(1).lengthDelimitedList[0].toByteArray()
             val idBytes = fields.getField(2).lengthDelimitedList[0].toByteArray()
-            return Pair(Multiaddr(addrBytes), PeerId(idBytes))
+            val seqBytes = fields.getField(3).lengthDelimitedList[0].toByteArray()
+            val inputMetaStream: CodedInputStream =
+                CodedInputStream.newInstance(fields.getField(4).lengthDelimitedList[0].toByteArray())
+            val metaFields: UnknownFieldSet = UnknownFieldSet.parseFrom(inputMetaStream)
+            val counter = AtomicInteger(1)
+            val metaMap = HashMap<ByteArray, ByteArray>()
+            while (metaFields.hasField(counter.get())) {
+                val keyBytes = fields.getField(counter.getAndIncrement()).lengthDelimitedList[0].toByteArray()
+                val valueBytes = fields.getField(counter.getAndIncrement()).lengthDelimitedList[0].toByteArray()
+                metaMap[keyBytes] = valueBytes
+            }
+
+            return Quartet(Multiaddr(addrBytes), PeerId(idBytes), BigInteger(1, seqBytes), metaMap)
         }
     }
 }
