@@ -16,7 +16,8 @@ import kotlin.math.roundToInt
 val PEER_COUNT = 100
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
-val ROUNDTRIP_MS = 100
+val LATENCY_LEG_MS = 100
+val LATENCY_MULTI_EACH_MS = 5 // 2 messages sent simultaneously = 100 + 5
 
 fun main(args: Array<String>) {
     println("Creating private key - enr pairs for $PEER_COUNT nodes")
@@ -104,7 +105,10 @@ fun calcTraffic(node: Node): Int {
 }
 
 fun calcTotalTime(node: Node): Int {
-    return node.outgoingMessages.size * ROUNDTRIP_MS
+    return node.roundtripLatency
+        .filter { it.isNotEmpty() }
+        .map { list -> LATENCY_LEG_MS + LATENCY_MULTI_EACH_MS * (list.size - 1) }
+        .sum()
 }
 
 fun calcKademliaPeers(table: KademliaTable): Int {

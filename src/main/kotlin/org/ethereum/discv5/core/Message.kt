@@ -13,12 +13,11 @@ class FindNodeMessage(val buckets: List<Int>) : Message {
     override val type = MessageType.FINDNODE
 
     /**
-     * Estimates FindNode size. Value is taken from implementation
+     * Estimates FindNode size. Value is taken from implementation and is average
      */
     override fun getSize(): Int {
         return 72 + buckets.size
     }
-
 }
 
 class NodesMessage(val peers: List<Enr>) : Message {
@@ -29,5 +28,27 @@ class NodesMessage(val peers: List<Enr>) : Message {
      */
     override fun getSize(): Int {
         return 74 + peers.size * 168
+    }
+}
+
+class PingMessage() : Message {
+    override val type = MessageType.PING
+
+    /**
+     * Estimates Ping size. Value is taken from implementation and is average
+     */
+    override fun getSize(): Int {
+        return 74
+    }
+}
+
+class PongMessage() : Message {
+    override val type = MessageType.PONG
+
+    /**
+     * Estimates Pong size. Value is taken from implementation and is average
+     */
+    override fun getSize(): Int {
+        return 80
     }
 }

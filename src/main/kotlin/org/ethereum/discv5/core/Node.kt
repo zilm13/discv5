@@ -23,11 +23,27 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     )
     val outgoingMessages: MutableList<Int> = ArrayList()
     val incomingMessages: MutableList<Int> = ArrayList()
+    val roundtripLatency: MutableList<List<Unit>> = ArrayList()
+
+    fun initTasks(): Unit {
+        if (tasks.isNotEmpty()) error("Already initialized")
+        tasks.let {
+            it.add(RecursiveTableVisit(this) { enr ->
+                this.findNodes(enr)
+            })
+            it.add(PingTableVisit(this))
+        }
+    }
+
+    fun step(): Unit {
+        tasks.forEach { it -> it.step() }
+    }
 
     fun resetAll() {
         tasks.clear()
         outgoingMessages.clear()
         incomingMessages.clear()
+        roundtripLatency.clear()
     }
 
     /**
@@ -54,13 +70,7 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
         val response = router.route(this, other, FindNodeMessage(buckets.toList()))
         response.map { handle(it, other) }
-        return response.map {(it as NodesMessage).peers}.flatten()
-    }
-
-    private fun handleFindNodes(message: FindNodeMessage): List<Message> {
-        return table.find(message.buckets).stream().limit(K_BUCKET.toLong()).toList().chunked(4).map {
-            NodesMessage(it)
-        }
+        return response.map { (it as NodesMessage).peers }.flatten()
     }
 
     fun handle(messages: List<Message>, initiator: Enr): List<Message> {
@@ -71,8 +81,17 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         return when (message.type) {
             MessageType.FINDNODE -> handleFindNodes(message as FindNodeMessage)
             MessageType.NODES -> handleNodes(message as NodesMessage, initiator)
+            MessageType.PING -> handlePing(message as PingMessage, initiator)
+            MessageType.PONG -> handlePong(message as PongMessage, initiator)
             else -> error("Not expected")
         }
+    }
+
+    private fun handleFindNodes(message: FindNodeMessage): List<Message> {
+        return table.find(message.buckets).stream().limit(K_BUCKET.toLong()).toList()
+            .chunked(4).map {
+                NodesMessage(it)
+            }
     }
 
     private fun handleNodes(message: NodesMessage, initiator: Enr): List<Message> {
@@ -81,34 +100,32 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         return emptyList()
     }
 
-
-    fun initTasks(): Unit {
-        if (tasks.isNotEmpty()) error("Already initialized")
-        tasks.let {
-            it.add(RecursiveTableVisit(this) {enr ->
-                this.findNodes(enr)
-            })
-            it.add(PingTableVisit(this))
-        }
-    }
-
-    fun step(): Unit {
-        tasks.forEach { it -> it.step() }
-    }
-
     /**
      * It would be more realistic if the chance of dropping peer will decrease with
      * each check (peer which is online for 2 hours will be more likely online in an hour
      * than the peer which is online for 1 hour) but such simulation could be very
      * complex and set aside for further improvements of simulation.
-     *
-     * TODO:
-     * 1. traffic
-     * 2. enr update payload
-     * 3. real down nodes
-     * 4. network loss
-     * */
-    fun ping(other: Enr): Boolean {
-        return rnd.nextInt((1 / CHANCE_TO_FORGET).roundToInt()) != 0
+     **/
+    private fun handlePing(message: PingMessage, initiator: Enr): List<Message> {
+        val alive = rnd.nextInt((1 / CHANCE_TO_FORGET).roundToInt()) != 0
+        return if (alive) {
+            listOf(PongMessage())
+        } else {
+            emptyList()
+        }
+    }
+
+    /**
+     * TODO: Enr update when seq changes
+     */
+    private fun handlePong(message: PongMessage, initiator: Enr): List<Message> {
+        this.table.put(initiator, this::ping)
+        return emptyList()
+    }
+
+    internal fun ping(other: Enr): Boolean {
+        val response = router.route(this, other, PingMessage())
+        response.map { handle(it, other) }
+        return response.isNotEmpty()
     }
 }
