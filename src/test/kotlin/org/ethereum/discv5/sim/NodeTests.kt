@@ -4,6 +4,7 @@ import io.libp2p.core.PeerId
 import io.libp2p.core.multiformats.Multiaddr
 import org.ethereum.discv5.core.Enr
 import org.ethereum.discv5.core.Node
+import org.ethereum.discv5.core.Router
 import org.ethereum.discv5.core.simTo
 import org.ethereum.discv5.util.KeyUtils
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -26,6 +27,7 @@ class NodeTests {
      */
     @BeforeAll
     internal fun setup() {
+        val router = Router()
         val peers = (0 until (100)).map {
             val ip = "127.0.0.1"
             val privKey = KeyUtils.genPrivKey(RANDOM)
@@ -34,10 +36,12 @@ class NodeTests {
                 addr,
                 PeerId(KeyUtils.privToPubCompressed(privKey))
             )
-            Node(enr, privKey, RANDOM)
+            Node(enr, privKey, RANDOM, router).apply {
+                router.register(this)
+            }
         }
-        node = Node(peers[0].enr, peers[0].privKey, RANDOM)
-        peers.subList(1, peers.size).map { it.enr }.forEach { node.table.put(it) }
+        node = peers[0]
+        peers.subList(1, peers.size).map { it.enr }.forEach { node.table.put(it) { true } }
         while ((245..256).subtract(otherNodeMap.keys).isNotEmpty()) {
             val privKey = KeyUtils.genPrivKey(RANDOM)
             val peerId = PeerId(KeyUtils.privToPubCompressed(privKey))
@@ -46,16 +50,19 @@ class NodeTests {
                 Node(
                     Enr(Multiaddr("/ip4/127.0.0.2/tcp/${distance - 1}"), peerId),
                     privKey,
-                    RANDOM
-                )
+                    RANDOM,
+                    router
+                ).apply {
+                    router.register(this)
+                }
             }
         }
 
     }
 
     @Test
-    fun testFindStrict() {
-        testImpl() { node, otherNode -> node!!.findNodesStrict(otherNode) }
+    fun testFindNode() {
+        testImpl() { node, otherNode -> node!!.findNodes(otherNode.enr) }
     }
 
     /**
@@ -72,7 +79,7 @@ class NodeTests {
         assertEquals(K_BUCKET, nodes255.size)
         val nodes254 = findFunction(otherNodeMap[254], node)
         assertEquals(254, node.enr.simTo(nodes254.first(), DISTANCE_DIVISOR))
-        assertEquals(253, node.enr.simTo(nodes254.last(), DISTANCE_DIVISOR))
+        assertEquals(255, node.enr.simTo(nodes254.last(), DISTANCE_DIVISOR))
         assertEquals(K_BUCKET, nodes254.size)
         val nodes253 = findFunction(otherNodeMap[253], node)
         assertEquals(253, node.enr.simTo(nodes253.first(), DISTANCE_DIVISOR))
@@ -80,29 +87,23 @@ class NodeTests {
         assertEquals(K_BUCKET, nodes253.size)
         val nodes252 = findFunction(otherNodeMap[252], node)
         assertEquals(252, node.enr.simTo(nodes252.first(), DISTANCE_DIVISOR))
-        assertEquals(250, node.enr.simTo(nodes252.last(), DISTANCE_DIVISOR))
-        assertEquals(K_BUCKET, nodes252.size)
+        assertEquals(251, node.enr.simTo(nodes252.last(), DISTANCE_DIVISOR))
+        assertEquals(14, nodes252.size)
         val nodes251 = findFunction(otherNodeMap[251], node)
         assertEquals(251, node.enr.simTo(nodes251.first(), DISTANCE_DIVISOR))
-        assertEquals(253, node.enr.simTo(nodes251.last(), DISTANCE_DIVISOR))
-        assertEquals(K_BUCKET, nodes251.size)
+        assertEquals(250, node.enr.simTo(nodes251.last(), DISTANCE_DIVISOR))
+        assertEquals(6, nodes251.size)
         val nodes250 = findFunction(otherNodeMap[250], node)
         assertEquals(250, node.enr.simTo(nodes250.first(), DISTANCE_DIVISOR))
-        assertEquals(253, node.enr.simTo(nodes250.last(), DISTANCE_DIVISOR))
-        assertEquals(K_BUCKET, nodes250.size)
+        assertEquals(251, node.enr.simTo(nodes250.last(), DISTANCE_DIVISOR))
+        assertEquals(3, nodes250.size)
         val nodes249 = findFunction(otherNodeMap[249], node)
-        assertEquals(248, node.enr.simTo(nodes249.first(), DISTANCE_DIVISOR))
-        assertEquals(253, node.enr.simTo(nodes249.last(), DISTANCE_DIVISOR))
-        assertEquals(K_BUCKET, nodes249.size)
-    }
-
-    @Test
-    fun testFindDown() {
-        testImpl() { node, otherNode -> node!!.findNodesDown(otherNode) }
-    }
-
-    @Test
-    fun testFindNeighbors() {
-        testImpl() { node, otherNode -> node!!.findNeighbors(otherNode) }
+        assertEquals(250, node.enr.simTo(nodes249.first(), DISTANCE_DIVISOR))
+        assertEquals(248, node.enr.simTo(nodes249.last(), DISTANCE_DIVISOR))
+        assertEquals(3, nodes249.size)
+        val nodes248 = findFunction(otherNodeMap[248], node)
+        assertEquals(248, node.enr.simTo(nodes248.first(), DISTANCE_DIVISOR))
+        assertEquals(248, node.enr.simTo(nodes248.last(), DISTANCE_DIVISOR))
+        assertEquals(1, nodes248.size)
     }
 }

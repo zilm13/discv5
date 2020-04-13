@@ -1,7 +1,6 @@
 package org.ethereum.discv5.core
 
 import io.libp2p.core.crypto.PrivKey
-import org.ethereum.discv5.util.MessageSizeEstimator
 import java.util.Random
 import kotlin.math.roundToInt
 import kotlin.streams.toList
@@ -32,10 +31,9 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     /**
-     * @return peers surrounding [other] using [KademliaTable.findStrict]
-     * to match Discovery V5 spec.
+     * Performs FINDNODE request and its handling
      */
-    internal fun findNodesStrict(other: Enr): List<Enr> {
+    internal fun findNodes(other: Enr): List<Enr> {
         val startBucket = other.simTo(enr, DISTANCE_DIVISOR)
         var currentRadius = 0
         val buckets = LinkedHashSet<Int>()
@@ -54,26 +52,41 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             currentRadius++
         }
 
-        outgoingMessages.add(MessageSizeEstimator.getFindNodesSize(buckets.size))
-        // TODO: make router forward messages between instances and put message measurement in it
-        return router.route(other)?.handleFindNodesStrict(buckets.toList(), enr)?.also {
-            incomingMessages.addAll(MessageSizeEstimator.getNodesSize(it.size))
-        } ?: emptyList()
+        val response = router.route(this, other, FindNodeMessage(buckets.toList()))
+        response.map { handle(it, other) }
+        return response.map {(it as NodesMessage).peers}.flatten()
     }
 
-    private fun handleFindNodesStrict(buckets: List<Int>, initiator: Enr): List<Enr> {
-        return table.findStrict(buckets).stream().limit(K_BUCKET.toLong()).toList().also {
-            incomingMessages.add(MessageSizeEstimator.getFindNodesSize(buckets.size))
-            outgoingMessages.addAll(MessageSizeEstimator.getNodesSize(it.size))
-            table.put(initiator, this::ping)
+    private fun handleFindNodes(message: FindNodeMessage): List<Message> {
+        return table.find(message.buckets).stream().limit(K_BUCKET.toLong()).toList().chunked(4).map {
+            NodesMessage(it)
         }
     }
+
+    fun handle(messages: List<Message>, initiator: Enr): List<Message> {
+        return messages.map { handle(it, initiator) }.flatten()
+    }
+
+    fun handle(message: Message, initiator: Enr): List<Message> {
+        return when (message.type) {
+            MessageType.FINDNODE -> handleFindNodes(message as FindNodeMessage)
+            MessageType.NODES -> handleNodes(message as NodesMessage, initiator)
+            else -> error("Not expected")
+        }
+    }
+
+    private fun handleNodes(message: NodesMessage, initiator: Enr): List<Message> {
+        this.table.put(initiator, this::ping)
+        message.peers.forEach { enrFound -> this.table.put(enrFound, this::ping) }
+        return emptyList()
+    }
+
 
     fun initTasks(): Unit {
         if (tasks.isNotEmpty()) error("Already initialized")
         tasks.let {
-            it.add(RecursiveTableVisit(this) { enr ->
-                findNodesStrict(enr).forEach { enrFound -> this.table.put(enrFound, this::ping) }
+            it.add(RecursiveTableVisit(this) {enr ->
+                this.findNodes(enr)
             })
             it.add(PingTableVisit(this))
         }

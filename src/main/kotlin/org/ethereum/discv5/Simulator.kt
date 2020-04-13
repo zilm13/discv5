@@ -110,7 +110,7 @@ fun calcTotalTime(node: Node): Int {
 fun calcKademliaPeers(table: KademliaTable): Int {
     var res = 0
     for (i in BUCKETS_COUNT downTo 1) {
-        res += table.findStrict(i).size
+        res += table.find(i).size
     }
     return res
 }

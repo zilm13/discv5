@@ -64,14 +64,14 @@ class KademliaTable(
     /**
      * @return all ENRs in input bucket
      */
-    fun findStrict(buckets: List<Int>): List<Enr> {
-        return buckets.map(this@KademliaTable::findStrict).flatten()
+    fun find(buckets: List<Int>): List<Enr> {
+        return buckets.map(this@KademliaTable::find).flatten()
     }
 
     /**
      * @return all ENRs in input bucket
      */
-    fun findStrict(bucket: Int): List<Enr> {
+    fun find(bucket: Int): List<Enr> {
         if (bucket == 0) {
             return listOf(home)
         }
@@ -84,7 +84,7 @@ class KademliaTable(
     }
 
     fun findAll(): List<Enr> {
-        return (1..numberBuckets).flatMap { findStrict(it) }
+        return (1..numberBuckets).flatMap { find(it) }
     }
 
     fun exists(enr: Enr): Boolean {
