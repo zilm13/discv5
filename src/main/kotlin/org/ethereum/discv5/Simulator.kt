@@ -12,10 +12,11 @@ import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
 import org.ethereum.discv5.util.formatTable
 import java.math.BigInteger
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-val PEER_COUNT = 100
+val PEER_COUNT = 1000
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val LATENCY_LEG_MS = 100
@@ -64,8 +65,9 @@ fun main(args: Array<String>) {
 //    System.exit(-1)
 
     println("Run simulation with FINDNODE(distances) API method according to updated Discovery V5 protocol")
-    runSimulationImpl(peers, ROUNDS_COUNT)
-    printSubnetPeersStats(peers)
+    val enrStats = runSimulationImpl(peers, ROUNDS_COUNT)
+//    visualizeSubnetPeersStats(peers)
+    printSubnetPeersStats(enrStats)
 //    val trafficFindNodeStrict = gatherTrafficStats(peers)
 //    val latencyFindNodeStrict = gatherLatencyStats(peers)
     peers.forEach(Node::resetAll)
@@ -83,16 +85,17 @@ fun gatherLatencyStats(peers: List<Node>): List<Int> {
     return peers.map { calcTotalTime(it) }.sorted()
 }
 
-fun runSimulationImpl(peers: List<Node>, rounds: Int) {
+fun runSimulationImpl(peers: List<Node>, rounds: Int) : ArrayList<Pair<Int, Int>> {
     assert(rounds > 50)
     peers.forEach(Node::initTasks)
     for (i in 0 until 50) {
         println("Simulating round #${i + 1}")
         peers.forEach(Node::step)
     }
-    val subnetPart = 10
-    println("Making $subnetPart% of peers with ENR from subnet")
-    peers.shuffled(RANDOM).take(peers.size * subnetPart / 100).forEach {
+
+    val subnetPartPercentage = 1
+    println("Making $subnetPartPercentage% of peers with ENR from subnet")
+    peers.shuffled(RANDOM).take(peers.size * subnetPartPercentage / 100).forEach {
         it.updateEnr(
             it.enr.seq.inc(),
             HashMap<ByteArray, ByteArray>().apply {
@@ -100,13 +103,20 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int) {
             }
         )
     }
+
+    val subnetIds = peers.filter { it.enr.seq == BigInteger.valueOf(2) }.map { it.enr.id }.toSet()
+    val enrStats = ArrayList<Pair<Int, Int>>()
+    enrStats.add(calcSubnetPeersStats(peers, subnetIds))
     for (i in 51 until rounds) {
         println("Simulating round #${i + 1}")
         peers.forEach(Node::step)
+        enrStats.add(calcSubnetPeersStats(peers, subnetIds))
     }
+
+    return enrStats
 }
 
-fun printSubnetPeersStats(peers: List<Node>) {
+fun visualizeSubnetPeersStats(peers: List<Node>) {
     val subnetIds = peers.filter { it.enr.seq == BigInteger.valueOf(2) }.map { it.enr.id }.toSet()
     println("Peer knowledge stats")
     println("===================================")
@@ -118,6 +128,37 @@ fun printSubnetPeersStats(peers: List<Node>) {
                     .filter { subnetIds.contains(it.id) }
                     .map { it.id.toHex().substring(0, 6) + "(" + it.seq + ")" }
                     .joinToString(", ")
+    }.joinToString("\n")
+    println((header + stats).formatTable(true))
+}
+
+fun calcSubnetPeersStats(peers: List<Node>, subnetIds: Set<PeerId>) : Pair<Int, Int> {
+    val firstCounter = AtomicInteger(0)
+    val secondCounter = AtomicInteger(0)
+    peers.forEach { peer ->
+        peer.table.findAll()
+            .filter { subnetIds.contains(it.id) }
+            .forEach {
+                when (it.seq) {
+                    BigInteger.ONE -> firstCounter.incrementAndGet()
+                    BigInteger.valueOf(2) -> secondCounter.incrementAndGet()
+                }
+            }
+    }
+
+    return Pair(firstCounter.get(), secondCounter.get())
+}
+
+fun printSubnetPeersStats(enrStats: ArrayList<Pair<Int, Int>>) {
+    println("Peer knowledge stats")
+    println("===================================")
+    val header = "Round #\t Peers known from 1st subnet\t from 2nd subnet\t Total subnet peer enrs\n"
+    val stats = enrStats.mapIndexed() { index, pair ->
+        val total = pair.first + pair.second
+        index.toString() + "\t" +
+                "%.2f".format(pair.first * 100.0/total) + "%\t" +
+                "%.2f".format(pair.second * 100.0/total) + "%\t" +
+                total
     }.joinToString("\n")
     println((header + stats).formatTable(true))
 }
