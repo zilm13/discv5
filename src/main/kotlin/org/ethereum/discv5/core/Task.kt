@@ -5,6 +5,7 @@ import java.util.Queue
 
 interface Task {
     fun step(): Unit
+    fun isOver(): Boolean
 }
 
 /**
@@ -23,6 +24,10 @@ class RecursiveTableVisit(private val node: Node, private val peerFn: (Enr) -> U
             return
         }
         peerFn(peers.poll())
+    }
+
+    override fun isOver(): Boolean {
+        return false
     }
 }
 
@@ -45,5 +50,29 @@ class PingTableVisit(private val node: Node) : Task {
         if (!node.ping(current)) {
             node.table.remove(current)
         }
+    }
+
+    override fun isOver(): Boolean {
+        return false
+    }
+}
+
+/**
+ * Any one step task
+ */
+class OneStepTask(private val fn: () -> Unit) : Task {
+    private var done: Boolean = false
+
+    override fun step() {
+        if (done) {
+            return
+        }
+
+        fn()
+        this.done = true
+    }
+
+    override fun isOver(): Boolean {
+        return done
     }
 }

@@ -1,10 +1,12 @@
 package org.ethereum.discv5.core
 
+import io.libp2p.core.PeerId
+
 class Router {
-    private val enrToNode: MutableMap<Enr, Node> = HashMap()
+    private val idToNode: MutableMap<PeerId, Node> = HashMap()
 
     fun register(node: Node) {
-        enrToNode.putIfAbsent(node.enr, node)
+        idToNode.putIfAbsent(node.enr.id, node)
     }
 
     /**
@@ -13,7 +15,7 @@ class Router {
     fun route(from: Node, to: Enr, message: Message): List<Message> {
         from.outgoingMessages.add(message.getSize())
         from.roundtripLatency.add(listOf(Unit))
-        val toNode = enrToNode.get(to)
+        val toNode = idToNode[to.id]
         if (toNode == null) {
             // TODO: log
             return emptyList()

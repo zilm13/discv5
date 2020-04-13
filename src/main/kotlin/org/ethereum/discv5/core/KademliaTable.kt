@@ -1,5 +1,6 @@
 package org.ethereum.discv5.core
 
+import io.libp2p.core.PeerId
 import java.util.LinkedList
 
 /**
@@ -18,8 +19,8 @@ class Bucket(
      * If yes, enr is dropped, otherwise head is removed and enr is added to the tail.
      */
     fun put(enr: Enr, liveCheck: (Enr) -> Boolean) {
-        if (contains(enr)) {
-            payload.remove(enr)
+        if (containsById(enr.id)) {
+            removeById(enr.id)
         }
         if (size == maxSize && !liveCheck(payload.peekLast())) {
             payload.removeLast()
@@ -29,8 +30,12 @@ class Bucket(
         }
     }
 
-    fun remove(enr: Enr): Boolean {
-        return payload.remove(enr)
+    private fun containsById(id: PeerId): Boolean {
+        return payload.find { it.id == id } != null
+    }
+
+    internal fun removeById(id: PeerId): Boolean {
+        return payload.removeIf { it.id == id }
     }
 }
 
@@ -40,7 +45,7 @@ class Bucket(
  * it reduces number of possible buckets and distances
  */
 class KademliaTable(
-    val home: Enr,
+    var home: Enr,
     private val bucketSize: Int,
     private val numberBuckets: Int,
     private val distanceDivisor: Int,
@@ -54,11 +59,19 @@ class KademliaTable(
     }
 
     fun put(enr: Enr, liveCheck: (Enr) -> Boolean) {
-        if (home == enr) {
+        if (home.id == enr.id) {
             return
         }
         val distance = home.simTo(enr, distanceDivisor)
         buckets.computeIfAbsent(distance) { Bucket(bucketSize) }.put(enr, liveCheck)
+    }
+
+    /**
+     * Expects non-id updates
+     */
+    fun updateHome(enr: Enr) {
+        assert(enr.id == home.id)
+        this.home = enr
     }
 
     /**
@@ -94,6 +107,6 @@ class KademliaTable(
 
     fun remove(enr: Enr): Boolean {
         val distance = home.simTo(enr, distanceDivisor)
-        return buckets[distance]?.remove(enr) ?: false
+        return buckets[distance]?.removeById(enr.id) ?: false
     }
 }

@@ -1,6 +1,7 @@
 package org.ethereum.discv5.core
 
 import io.libp2p.core.crypto.PrivKey
+import java.math.BigInteger
 import java.util.Random
 import kotlin.math.roundToInt
 import kotlin.streams.toList
@@ -11,7 +12,7 @@ val DISTANCE_DIVISOR = 1 // Reduces number of possible distances with numbers gr
 val CHANCE_TO_FORGET = 0.2
 val NEIGHBORS_DISTANCES_LIMIT = 3
 
-data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router: Router) {
+data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router: Router) {
     val tasks: MutableList<Task> = ArrayList()
     val table = KademliaTable(
         enr,
@@ -36,7 +37,8 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     fun step(): Unit {
-        tasks.forEach { it -> it.step() }
+        tasks.removeAll { it.isOver() }
+        tasks.forEach { it.step() }
     }
 
     fun resetAll() {
@@ -44,6 +46,11 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         outgoingMessages.clear()
         incomingMessages.clear()
         roundtripLatency.clear()
+    }
+
+    fun updateEnr(seq: BigInteger, meta: Map<ByteArray, ByteArray>) {
+        this.enr = Enr(enr.addr, enr.id, seq, meta)
+        table.updateHome(enr)
     }
 
     /**
@@ -71,6 +78,15 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         val response = router.route(this, other, FindNodeMessage(buckets.toList()))
         response.map { handle(it, other) }
         return response.map { (it as NodesMessage).peers }.flatten()
+    }
+
+    /**
+     * Performs FINDNODE request on other node to get it and its handling
+     */
+    internal fun updateNode(other: Enr): Enr {
+        val response = router.route(this, other, FindNodeMessage(listOf(0)))
+        response.map { handle(it, other) }
+        return response.map { (it as NodesMessage).peers }.flatten().get(0)
     }
 
     fun handle(messages: List<Message>, initiator: Enr): List<Message> {
@@ -109,17 +125,18 @@ data class Node(val enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     private fun handlePing(message: PingMessage, initiator: Enr): List<Message> {
         val alive = rnd.nextInt((1 / CHANCE_TO_FORGET).roundToInt()) != 0
         return if (alive) {
-            listOf(PongMessage())
+            listOf(PongMessage(enr.seq))
         } else {
             emptyList()
         }
     }
 
-    /**
-     * TODO: Enr update when seq changes
-     */
     private fun handlePong(message: PongMessage, initiator: Enr): List<Message> {
-        this.table.put(initiator, this::ping)
+        if (initiator.seq == message.seq) {
+            this.table.put(initiator, this::ping)
+        } else {
+            tasks.add(OneStepTask { updateNode(initiator) })
+        }
         return emptyList()
     }
 

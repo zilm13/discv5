@@ -1,5 +1,7 @@
 package org.ethereum.discv5.core
 
+import java.math.BigInteger
+
 interface Message {
     val type: MessageType
     fun getSize(): Int
@@ -42,7 +44,7 @@ class PingMessage() : Message {
     }
 }
 
-class PongMessage() : Message {
+class PongMessage(val seq: BigInteger) : Message {
     override val type = MessageType.PONG
 
     /**
