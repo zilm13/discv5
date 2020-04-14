@@ -7,7 +7,7 @@ description = "Discovery v5 research and simulations"
 plugins {
     java
     idea
-    kotlin("jvm") version "1.3.31"
+    kotlin("jvm") version "1.3.71"
 }
 
 repositories {
