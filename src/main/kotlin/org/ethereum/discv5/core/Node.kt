@@ -27,6 +27,12 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     val incomingMessages: MutableList<Int> = ArrayList()
     val roundtripLatency: MutableList<List<Unit>> = ArrayList()
 
+    /**
+     * TODO:
+     * 1. Do we have table for all known peers, which is completely cleaned on restart
+     * but used while it works? Is this table used as a source for tasks input?
+     * 2. Each task should maintain number of parallel jobs, where number is configured
+     */
     fun initTasks(): Unit {
         if (tasks.isNotEmpty()) error("Already initialized")
         tasks.let {
