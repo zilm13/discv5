@@ -97,7 +97,7 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int): ArrayList<Pair<Int, Int>>
     }
 
     println("Making $SUBNET_SHARE_PCT% of peers with ENR from subnet")
-    peers.shuffled(RANDOM).take(peers.size * SUBNET_SHARE_PCT / 100).forEach {
+    peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt()).forEach {
         it.updateEnr(
             it.enr.seq.inc(),
             HashMap<ByteArray, ByteArray>().apply {
@@ -107,6 +107,8 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int): ArrayList<Pair<Int, Int>>
     }
 
     val subnetIds = peers.filter { it.enr.seq == BigInteger.valueOf(2) }.map { it.enr.id }.toSet()
+    assert(subnetIds.isNotEmpty())
+    println("Total subnet peers count: ${subnetIds.size}")
     val enrStats = ArrayList<Pair<Int, Int>>()
     enrStats.add(calcSubnetPeersStats(peers, subnetIds))
     for (i in 51 until (51 + TIMEOUT_STEP)) {
