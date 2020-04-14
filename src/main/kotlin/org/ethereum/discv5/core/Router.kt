@@ -1,9 +1,11 @@
 package org.ethereum.discv5.core
 
 import io.libp2p.core.PeerId
+import org.apache.logging.log4j.LogManager
 
 class Router {
     private val idToNode: MutableMap<PeerId, Node> = HashMap()
+    private val logger = LogManager.getLogger("Router")
 
     fun register(node: Node) {
         idToNode.putIfAbsent(node.enr.id, node)
@@ -17,7 +19,7 @@ class Router {
         from.roundtripLatency.add(listOf(Unit))
         val toNode = idToNode[to.id]
         if (toNode == null) {
-            // TODO: log
+            logger.debug("Failed to route $message from Node${from.enr.toId()} to Node${to.toId()}, recipient not found")
             return emptyList()
         }
         toNode.incomingMessages.add(message.getSize())

@@ -2,6 +2,7 @@ package org.ethereum.discv5.core
 
 import io.libp2p.core.crypto.PrivKey
 import io.libp2p.etc.types.copy
+import org.apache.logging.log4j.LogManager
 import java.math.BigInteger
 import java.util.Random
 import kotlin.math.roundToInt
@@ -26,6 +27,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     val outgoingMessages: MutableList<Int> = ArrayList()
     val incomingMessages: MutableList<Int> = ArrayList()
     val roundtripLatency: MutableList<List<Unit>> = ArrayList()
+    private val logger = LogManager.getLogger("Node${enr.toId()}")
 
     /**
      * TODO:
@@ -44,7 +46,22 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     fun step(): Unit {
-        tasks.removeAll { it.isOver() }
+        tasks.removeAll {
+            it.isOver().apply {
+                if (this) {
+                    logger.debug("Task $it will be removed because it's over")
+                }
+            }
+        }
+        // XXX: we could have duplicates if node was seen with new seq several times
+        val firstOccurrence = HashSet<NodeUpdateTask>()
+        tasks.removeAll { task ->
+            (task is NodeUpdateTask && firstOccurrence.contains(task)).also {
+                if (!it && task is NodeUpdateTask) {
+                    firstOccurrence.add(task)
+                }
+            }
+        }
         // XXX: new tasks could be added during any step but we shouldn't change current tasks
         val thisStepTasks = tasks.copy()
         thisStepTasks.forEach { it.step() }
@@ -133,7 +150,15 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
      **/
     private fun handlePing(message: PingMessage, initiator: Enr): List<Message> {
         val alive = rnd.nextInt((1 / CHANCE_TO_FORGET).roundToInt()) != 0
+        val that = this
         return if (alive) {
+            // Update initiator record if on record sequence not matches one from message
+            table.findOne(initiator.id)?.takeIf { it.seq != message.seq }?.run {
+                tasks.add(NodeUpdateTask(initiator, that)
+                    .also {
+                        logger.debug("Task $it added as PING shows new sequence ${message.seq}")
+                    })
+            }
             listOf(PongMessage(enr.seq))
         } else {
             emptyList()
@@ -144,13 +169,15 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         if (initiator.seq == message.seq) {
             this.table.put(initiator, this::ping)
         } else {
-            tasks.add(OneStepTask { updateNode(initiator) })
+            tasks.add(NodeUpdateTask(initiator, this).also {
+                logger.debug("Task $it added as PONG shows new sequence ${message.seq}")
+            })
         }
         return emptyList()
     }
 
     internal fun ping(other: Enr): Boolean {
-        val response = router.route(this, other, PingMessage())
+        val response = router.route(this, other, PingMessage(enr.seq))
         response.map { handle(it, other) }
         return response.isNotEmpty()
     }

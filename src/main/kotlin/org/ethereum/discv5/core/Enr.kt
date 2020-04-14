@@ -52,6 +52,10 @@ data class Enr(val addr: Multiaddr, val id: PeerId, val seq: BigInteger, val met
         return baos.toByteArray()
     }
 
+    fun toId(): String {
+        return "#${id.toHex().substring(0, 6)}"
+    }
+
     companion object {
         private fun fromBytes(bytes: ByteArray): Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArray, ByteArray>> {
             val inputStream: CodedInputStream = CodedInputStream.newInstance(bytes)

@@ -1,6 +1,8 @@
 package org.ethereum.discv5.core
 
 import io.libp2p.core.PeerId
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 import java.util.LinkedList
 
 /**
@@ -9,7 +11,8 @@ import java.util.LinkedList
  */
 class Bucket(
     private val maxSize: Int,
-    private val payload: LinkedList<Enr> = LinkedList()
+    private val payload: LinkedList<Enr> = LinkedList(),
+    private val logger: Logger
 ) : List<Enr> by payload {
 
     /**
@@ -23,11 +26,16 @@ class Bucket(
             removeById(enr.id)
         }
         if (size == maxSize && !liveCheck(payload.peekLast())) {
+            logger.trace("Dead enr ${payload.peekLast().toId()} removed in favor of ${enr.toId()}")
             payload.removeLast()
         }
         if (size < maxSize) {
             payload.add(enr)
         }
+    }
+
+    internal fun findById(id: PeerId): Enr? {
+        return payload.find { it.id == id }
     }
 
     internal fun containsById(id: PeerId): Boolean {
@@ -53,6 +61,7 @@ class KademliaTable(
     bootNodes: Collection<Enr> = ArrayList()
 ) {
     private val buckets: MutableMap<Int, Bucket> = HashMap()
+    private val logger = LogManager.getLogger("Table${home.toId()}")
 
     init {
         bootNodes.forEach { put(it, liveCheck) }
@@ -63,7 +72,7 @@ class KademliaTable(
             return
         }
         val distance = home.simTo(enr, distanceDivisor)
-        buckets.computeIfAbsent(distance) { Bucket(bucketSize) }.put(enr, liveCheck)
+        buckets.computeIfAbsent(distance) { Bucket(bucketSize, logger = logger) }.put(enr, liveCheck)
     }
 
     /**
@@ -94,6 +103,14 @@ class KademliaTable(
                 this.addAll(it)
             }
         }
+    }
+
+    /**
+     * @return enr with input id if it's found in table
+     */
+    fun findOne(id: PeerId): Enr? {
+        val distance = home.id.simTo(id, distanceDivisor)
+        return buckets[distance]?.findById(id)
     }
 
     fun findAll(): List<Enr> {

@@ -33,14 +33,14 @@ class NodesMessage(val peers: List<Enr>) : Message {
     }
 }
 
-class PingMessage() : Message {
+class PingMessage(val seq: BigInteger) : Message {
     override val type = MessageType.PING
 
     /**
      * Estimates Ping size. Value is taken from implementation and is average
      */
     override fun getSize(): Int {
-        return 74
+        return 76
     }
 }
 
