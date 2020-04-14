@@ -21,6 +21,9 @@ val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val LATENCY_LEG_MS = 100
 val LATENCY_MULTI_EACH_MS = 5 // 2 messages sent simultaneously = 100 + 5
+val SUBNET_SHARE_PCT = 1 // Which part of all peers are validators from one tracked subnet, in %
+val TARGET_PERCENTILE = 98
+val TIMEOUT_STEP = 1000 // If target percentile is not achieved until TIMEOUT_STEP, simulation is stopped
 
 fun main(args: Array<String>) {
     println("Creating private key - enr pairs for $PEER_COUNT nodes")
@@ -85,7 +88,7 @@ fun gatherLatencyStats(peers: List<Node>): List<Int> {
     return peers.map { calcTotalTime(it) }.sorted()
 }
 
-fun runSimulationImpl(peers: List<Node>, rounds: Int) : ArrayList<Pair<Int, Int>> {
+fun runSimulationImpl(peers: List<Node>, rounds: Int): ArrayList<Pair<Int, Int>> {
     assert(rounds > 50)
     peers.forEach(Node::initTasks)
     for (i in 0 until 50) {
@@ -93,9 +96,8 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int) : ArrayList<Pair<Int, Int>
         peers.forEach(Node::step)
     }
 
-    val subnetPartPercentage = 1
-    println("Making $subnetPartPercentage% of peers with ENR from subnet")
-    peers.shuffled(RANDOM).take(peers.size * subnetPartPercentage / 100).forEach {
+    println("Making $SUBNET_SHARE_PCT% of peers with ENR from subnet")
+    peers.shuffled(RANDOM).take(peers.size * SUBNET_SHARE_PCT / 100).forEach {
         it.updateEnr(
             it.enr.seq.inc(),
             HashMap<ByteArray, ByteArray>().apply {
@@ -107,10 +109,13 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int) : ArrayList<Pair<Int, Int>
     val subnetIds = peers.filter { it.enr.seq == BigInteger.valueOf(2) }.map { it.enr.id }.toSet()
     val enrStats = ArrayList<Pair<Int, Int>>()
     enrStats.add(calcSubnetPeersStats(peers, subnetIds))
-    for (i in 51 until rounds) {
+    for (i in 51 until (51 + TIMEOUT_STEP)) {
         println("Simulating round #${i + 1}")
         peers.forEach(Node::step)
         enrStats.add(calcSubnetPeersStats(peers, subnetIds))
+        if (enrStats.last().second * 100.0 / (enrStats.last().first + enrStats.last().second) > TARGET_PERCENTILE) {
+            break
+        }
     }
 
     return enrStats
@@ -132,7 +137,7 @@ fun visualizeSubnetPeersStats(peers: List<Node>) {
     println((header + stats).formatTable(true))
 }
 
-fun calcSubnetPeersStats(peers: List<Node>, subnetIds: Set<PeerId>) : Pair<Int, Int> {
+fun calcSubnetPeersStats(peers: List<Node>, subnetIds: Set<PeerId>): Pair<Int, Int> {
     val firstCounter = AtomicInteger(0)
     val secondCounter = AtomicInteger(0)
     peers.forEach { peer ->
@@ -156,8 +161,8 @@ fun printSubnetPeersStats(enrStats: ArrayList<Pair<Int, Int>>) {
     val stats = enrStats.mapIndexed() { index, pair ->
         val total = pair.first + pair.second
         index.toString() + "\t" +
-                "%.2f".format(pair.first * 100.0/total) + "%\t" +
-                "%.2f".format(pair.second * 100.0/total) + "%\t" +
+                "%.2f".format(pair.first * 100.0 / total) + "%\t" +
+                "%.2f".format(pair.second * 100.0 / total) + "%\t" +
                 total
     }.joinToString("\n")
     println((header + stats).formatTable(true))
