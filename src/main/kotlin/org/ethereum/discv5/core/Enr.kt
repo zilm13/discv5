@@ -116,12 +116,6 @@ fun PeerId.to(other: PeerId): Int {
 }
 
 /**
- * Same as [PeerId.to] but reduced to decrease number of possible distances for simulation
- */
-fun PeerId.simTo(other: PeerId, distanceDivisor: Int) =
-    kotlin.math.ceil(this.to(other) / distanceDivisor.toDouble()).toInt()
-
-/**
  * The 'distance' between this [Node] and other is the bitwise XOR of the [PeerId]s, taken as the number.
  *
  * <p>distance(n₁, n₂) = n₁ XOR n₂
@@ -130,8 +124,3 @@ fun PeerId.simTo(other: PeerId, distanceDivisor: Int) =
  * in XOR)
  */
 fun Enr.to(other: Enr): Int = this.id.to(other.id)
-
-/**
- * Same as [Enr.to] but reduced to decrease number of possible distances for simulation
- */
-fun Enr.simTo(other: Enr, distanceDivisor: Int) = this.id.simTo(other.id, distanceDivisor)

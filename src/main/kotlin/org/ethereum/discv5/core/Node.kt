@@ -1,27 +1,32 @@
 package org.ethereum.discv5.core
 
+import io.libp2p.core.PeerId
 import io.libp2p.core.crypto.PrivKey
+import io.libp2p.core.crypto.sha256
 import io.libp2p.etc.types.copy
 import org.apache.logging.log4j.LogManager
 import java.math.BigInteger
+import java.util.LinkedList
 import java.util.Random
 import kotlin.math.roundToInt
 import kotlin.streams.toList
 
 val K_BUCKET = 16
 val BUCKETS_COUNT = 256
-val DISTANCE_DIVISOR = 1 // Reduces number of possible distances with numbers greater than 1
 val CHANCE_TO_FORGET = 0.2
 val NEIGHBORS_DISTANCES_LIMIT = 3
+val AD_RETRY_MAX_STEPS = 10
+val AD_LIFE_STEPS = 50
+val PARALLELISM = 3 // Parallelism of all actions
 
 data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router: Router) {
     val tasks: MutableList<Task> = ArrayList()
+    val topics: MutableMap<ByteArray, MutableMap<PeerId, Pair<Enr, Int>>> = HashMap()
     val table = KademliaTable(
         enr,
         K_BUCKET,
         BUCKETS_COUNT,
-        DISTANCE_DIVISOR,
-        { ping(it) },
+        { enr, cb -> ping(enr, cb) },
         listOf()
     )
     val outgoingMessages: MutableList<Int> = ArrayList()
@@ -39,7 +44,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         if (tasks.isNotEmpty()) error("Already initialized")
         tasks.let {
             it.add(RecursiveTableVisit(this) { enr ->
-                this.findNodes(enr)
+                this.findNodes(enr, cb = {})
             })
             it.add(PingTableVisit(this))
         }
@@ -65,6 +70,19 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         // XXX: new tasks could be added during any step but we shouldn't change current tasks
         val thisStepTasks = tasks.copy()
         thisStepTasks.forEach { it.step() }
+        for (topic in topics) {
+            val toRemove = HashSet<PeerId>()
+            for (entry in topic.value) {
+                if (entry.value.second == 1) {
+                    toRemove.add(entry.key)
+                } else {
+                    entry.setValue(Pair(entry.value.first, entry.value.second - 1))
+                }
+            }
+            toRemove.forEach { topic.value.remove(it) }
+        }
+        val toRemove = topics.filter { it.value.isEmpty() }.keys
+        toRemove.forEach { topics.remove(it) }
     }
 
     fun resetAll() {
@@ -80,10 +98,13 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     /**
-     * Performs FINDNODE request and its handling
+     * Performs FINDNODE request and returns its result
+     * @param other Enr identity of peer to send request to
+     * @param center id used as a center of search, so lookup is searching for nodes closest to `center` PeerId
+     * @param cb called when result is available
      */
-    internal fun findNodes(other: Enr): List<Enr> {
-        val startBucket = other.simTo(enr, DISTANCE_DIVISOR)
+    internal fun findNodes(other: Enr, center: PeerId = enr.id, cb: (List<Enr>) -> Unit) {
+        val startBucket = other.id.to(center)
         var currentRadius = 0
         val buckets = LinkedHashSet<Int>()
         while (buckets.size < NEIGHBORS_DISTANCES_LIMIT) {
@@ -101,9 +122,14 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             currentRadius++
         }
 
-        val response = router.route(this, other, FindNodeMessage(buckets.toList()))
-        response.map { handle(it, other) }
-        return response.map { (it as NodesMessage).peers }.flatten()
+        tasks.add(MessageRoundTripTask(this, other, FindNodeMessage(buckets.toList())) {
+            handle(
+                it,
+                other
+            ).map { message -> (message as NodesMessage).peers }.flatten().apply(cb)
+        }.also {
+            logger.trace("Task $it added")
+        })
     }
 
     /**
@@ -125,7 +151,48 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             MessageType.NODES -> handleNodes(message as NodesMessage, initiator)
             MessageType.PING -> handlePing(message as PingMessage, initiator)
             MessageType.PONG -> handlePong(message as PongMessage, initiator)
+            MessageType.REGTOPIC -> handleRegTopic(message as RegTopicMessage, initiator)
+            MessageType.TICKET -> handleTicket(message as TicketMessage, initiator)
+            MessageType.REGCONFIRMATION -> handleRegConfirmation(message as RegConfirmation, initiator)
+            MessageType.TOPICQUERY -> handleTopicQuery(message as TopicQuery, initiator)
             else -> error("Not expected")
+        }
+    }
+
+    private fun handleTopicQuery(topicQuery: TopicQuery, initiator: Enr): List<Message> {
+        return topics[topicQuery.topic]?.map { it.value.first }?.toList()
+            ?.chunked(4)?.map {
+                NodesMessage(it)
+            } ?: emptyList()
+    }
+
+    private fun handleRegConfirmation(regConfirmation: RegConfirmation, initiator: Enr): List<Message> {
+        // Don't need anything here, all is done in task
+        return emptyList()
+    }
+
+    private fun handleTicket(ticketMessage: TicketMessage, initiator: Enr): List<Message> {
+        // Don't need anything here, all is done in task
+        return emptyList()
+    }
+
+    private fun handleRegTopic(regTopicMessage: RegTopicMessage, initiator: Enr): List<Message> {
+        // TODO: update enr if needed
+        // TODO: make new ticket for an answer
+        when {
+            regTopicMessage.topic !in topics -> {
+                topics[regTopicMessage.topic] =
+                    HashMap<PeerId, Pair<Enr, Int>>().also { it[initiator.id] = Pair(initiator, AD_LIFE_STEPS) }
+                return listOf(TicketMessage(regTopicMessage.ticket, 0), RegConfirmation(regTopicMessage.topic))
+            }
+            initiator.id !in topics[regTopicMessage.topic]!! -> {
+                topics[regTopicMessage.topic]?.set(initiator.id, Pair(initiator, AD_LIFE_STEPS))
+                return listOf(TicketMessage(regTopicMessage.ticket, 0), RegConfirmation(regTopicMessage.topic))
+            }
+            else -> {
+                val registeredPair = topics[regTopicMessage.topic]!![initiator.id]!!
+                return listOf(TicketMessage(regTopicMessage.ticket, registeredPair.second))
+            }
         }
     }
 
@@ -176,9 +243,45 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         return emptyList()
     }
 
-    internal fun ping(other: Enr): Boolean {
-        val response = router.route(this, other, PingMessage(enr.seq))
-        response.map { handle(it, other) }
-        return response.isNotEmpty()
+    internal fun ping(other: Enr, cb: (Boolean) -> Unit) {
+        tasks.add(MessageRoundTripTask(this, other, PingMessage(enr.seq)) {
+            handle(
+                it,
+                other
+            ).isNotEmpty().apply(cb)
+        }.also {
+            logger.trace("Task $it added")
+        })
+    }
+
+    /**
+     * Performs REGTOPIC request and returns its result
+     * @param radius Number of peers to place ad at
+     * @param random Whether to place it within topic hash peer ids
+     * or on random set of peers
+     */
+    internal fun registerTopic(topic: ByteArray, radius: Int, random: Boolean, cb: (List<Boolean>) -> Unit) {
+        val topicHash = sha256(topic)
+        val topicId = PeerId(topicHash)
+        val mediaSearchTask: ProducerTask<List<Enr>>
+        if (random) {
+            // FIXME: or use store of all known peers instead of only Kademlia?
+            mediaSearchTask = ImmediateProducer(table.findAll().shuffled(rnd).take(radius))
+        } else {
+            // it should be task
+            // take 3 closest
+            val distance = topicId.to(enr.id)
+            var candidates = table.find(distance)
+            if (candidates.size < K_BUCKET) {
+                candidates = KademliaTable.filterNeighborhood(topicId, table.findAll(), K_BUCKET)
+            }
+            val candidatesQueue = LinkedList(candidates)
+            mediaSearchTask = ParallelIdSearchTask(this, topicId, candidatesQueue::poll, PARALLELISM, radius, rnd)
+        }
+
+        val task = TopicAdvertiseTask(this, mediaSearchTask, topicHash, AD_RETRY_MAX_STEPS, PARALLELISM, cb).also {
+            logger.trace("Task $it added")
+        }
+        tasks.add(task)
     }
 }

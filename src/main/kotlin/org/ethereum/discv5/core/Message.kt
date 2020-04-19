@@ -8,7 +8,7 @@ interface Message {
 }
 
 enum class MessageType {
-    FINDNODE, NODES, PING, PONG
+    FINDNODE, NODES, PING, PONG, REGTOPIC, TICKET, REGCONFIRMATION, TOPICQUERY
 }
 
 class FindNodeMessage(val buckets: List<Int>) : Message {
@@ -52,5 +52,49 @@ class PongMessage(val seq: BigInteger) : Message {
      */
     override fun getSize(): Int {
         return 80
+    }
+}
+
+class RegTopicMessage(val topic: ByteArray, val enr: Enr, val ticket: ByteArray) : Message {
+    override val type = MessageType.REGTOPIC
+
+    /**
+     * Estimates RegTopic size. Value is taken from implementation and is average
+     */
+    override fun getSize(): Int {
+        return 72 + 168 + topic.size + ticket.size
+    }
+}
+
+class TicketMessage(val ticket: ByteArray, val waitSteps: Int) : Message {
+    override val type = MessageType.TICKET
+
+    /**
+     * Estimates Ticket size. Value is taken from implementation and is average
+     */
+    override fun getSize(): Int {
+        return 76 + ticket.size
+    }
+}
+
+class RegConfirmation(val topic: ByteArray) : Message {
+    override val type = MessageType.REGCONFIRMATION
+
+    /**
+     * Estimates RegConfirmation size. Value is taken from implementation and is average
+     */
+    override fun getSize(): Int {
+        return 72 + topic.size
+    }
+}
+
+class TopicQuery(val topic: ByteArray) : Message {
+    override val type = MessageType.TOPICQUERY
+
+    /**
+     * Estimates TopicQuery size. Value is taken from implementation and is average
+     */
+    override fun getSize(): Int {
+        return 72 + topic.size
     }
 }

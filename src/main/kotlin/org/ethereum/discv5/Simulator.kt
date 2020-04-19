@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-val PEER_COUNT = 1000
+val PEER_COUNT = 100
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 100
 val LATENCY_LEG_MS = 100
@@ -59,7 +59,7 @@ fun main(args: Array<String>) {
     println("Filling peer's Kademlia tables according to distribution")
     peers.forEachIndexed() { index, peer ->
         (1..peerDistribution[index]).map { peers[RANDOM.nextInt(PEER_COUNT)] }
-            .forEach { peer.table.put(it.enr) { true } }
+            .forEach { peer.table.put(it.enr) { enr, cb -> cb(true) } }
         if (index > 0 && index % 1000 == 0) {
             println("$index peer tables filled")
         }

@@ -21,13 +21,19 @@ class Bucket(
      * in original Kademlia we test head candidate, whether its alive.
      * If yes, enr is dropped, otherwise head is removed and enr is added to the tail.
      */
-    fun put(enr: Enr, liveCheck: (Enr) -> Boolean) {
+    fun put(enr: Enr, liveCheck: (Enr, (Boolean) -> Unit) -> Unit) {
         if (containsById(enr.id)) {
             removeById(enr.id)
         }
-        if (size == maxSize && !liveCheck(payload.peekLast())) {
-            logger.trace("Dead enr ${payload.peekLast().toId()} removed in favor of ${enr.toId()}")
-            payload.removeLast()
+        if (size == maxSize) {
+            val tested = payload.peekLast()
+            liveCheck(tested) {
+                if (!it) {
+                    logger.trace("Dead enr ${payload.peekLast().toId()} removed in favor of ${enr.toId()}")
+                    payload.remove(tested)
+                    payload.add(enr)
+                }
+            }
         }
         if (size < maxSize) {
             payload.add(enr)
@@ -49,15 +55,12 @@ class Bucket(
 
 /**
  * Kademlia table according to original Kademlia protocol
- * There is a simulation feature configured by [distanceDivisor]:
- * it reduces number of possible buckets and distances
  */
 class KademliaTable(
     var home: Enr,
     private val bucketSize: Int,
     private val numberBuckets: Int,
-    private val distanceDivisor: Int,
-    private val liveCheck: (Enr) -> Boolean,
+    private val liveCheck: (Enr, (Boolean) -> Unit) -> Unit,
     bootNodes: Collection<Enr> = ArrayList()
 ) {
     private val buckets: MutableMap<Int, Bucket> = HashMap()
@@ -67,11 +70,11 @@ class KademliaTable(
         bootNodes.forEach { put(it, liveCheck) }
     }
 
-    fun put(enr: Enr, liveCheck: (Enr) -> Boolean) {
+    fun put(enr: Enr, liveCheck: (Enr, (Boolean) -> Unit) -> Unit) {
         if (home.id == enr.id) {
             return
         }
-        val distance = home.simTo(enr, distanceDivisor)
+        val distance = home.to(enr)
         buckets.computeIfAbsent(distance) { Bucket(bucketSize, logger = logger) }.put(enr, liveCheck)
     }
 
@@ -109,7 +112,7 @@ class KademliaTable(
      * @return enr with input id if it's found in table
      */
     fun findOne(id: PeerId): Enr? {
-        val distance = home.id.simTo(id, distanceDivisor)
+        val distance = home.id.to(id)
         return buckets[distance]?.findById(id)
     }
 
@@ -118,12 +121,22 @@ class KademliaTable(
     }
 
     fun exists(enr: Enr): Boolean {
-        val distance = home.simTo(enr, distanceDivisor)
+        val distance = home.to(enr)
         return buckets[distance]?.containsById(enr.id) ?: false
     }
 
     fun remove(enr: Enr): Boolean {
-        val distance = home.simTo(enr, distanceDivisor)
+        val distance = home.to(enr)
         return buckets[distance]?.removeById(enr.id) ?: false
+    }
+
+    companion object {
+        /**
+         * Sorts [candidates] by distance from [center] and
+         * and returns up to [limit] size
+         */
+        fun filterNeighborhood(center: PeerId, candidates: Collection<Enr>, limit: Int): List<Enr> {
+            return candidates.sortedBy { center.to(it.id) }.take(limit)
+        }
     }
 }
