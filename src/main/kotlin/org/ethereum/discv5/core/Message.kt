@@ -75,6 +75,10 @@ class TicketMessage(val ticket: ByteArray, val waitSteps: Int) : Message {
     override fun getSize(): Int {
         return 76 + ticket.size
     }
+
+    companion object {
+        fun getAverageTicketSize() = 100
+    }
 }
 
 class RegConfirmation(val topic: ByteArray) : Message {

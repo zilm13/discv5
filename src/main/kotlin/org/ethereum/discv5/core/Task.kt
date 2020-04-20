@@ -333,6 +333,7 @@ class AdvertiseOnMediaTask(
     private var finished = false
     private var needRetryIn: Int = 0
     private var result = false
+    private var retrying = false
 
     override fun step() {
         if (finished) {
@@ -346,8 +347,13 @@ class AdvertiseOnMediaTask(
     }
 
     private fun placeTask() {
-        // TODO: make real ticket
-        node.tasks.add(MessageRoundTripTask(node, media, RegTopicMessage(topicHash, node.enr, ByteArray(1))) {
+        val ticket: ByteArray
+        if (retrying) {
+            ticket = ByteArray(TicketMessage.getAverageTicketSize())
+        } else {
+            ticket = ByteArray(1)
+        }
+        node.tasks.add(MessageRoundTripTask(node, media, RegTopicMessage(topicHash, node.enr, ticket)) {
             node.handle(
                 it,
                 media
@@ -366,6 +372,7 @@ class AdvertiseOnMediaTask(
             result = true
         } else if (message.waitSteps <= adRetrySteps) {
             needRetryIn = message.waitSteps
+            retrying = true
         } else {
             finished = true
             result = false

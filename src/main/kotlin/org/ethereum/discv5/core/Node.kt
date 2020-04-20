@@ -133,7 +133,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     /**
-     * Performs FINDNODE request on other node to get it and its handling
+     * Performs FINDNODE(0) request on other node to get its enr and handles it
      */
     internal fun updateNode(other: Enr): Enr {
         val response = router.route(this, other, FindNodeMessage(listOf(0)))
@@ -177,21 +177,26 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     private fun handleRegTopic(regTopicMessage: RegTopicMessage, initiator: Enr): List<Message> {
-        // TODO: update enr if needed
-        // TODO: make new ticket for an answer
+        table.findOne(initiator.id)?.takeIf { it.seq != regTopicMessage.enr.seq }?.let {
+            tasks.add(NodeUpdateTask(initiator, this)
+                .also {
+                    logger.debug("Task $it added as REGTOPIC shows new sequence ${regTopicMessage.enr.seq}")
+                })
+        }
+        val ticket = ByteArray(TicketMessage.getAverageTicketSize())
         when {
             regTopicMessage.topic !in topics -> {
                 topics[regTopicMessage.topic] =
                     HashMap<PeerId, Pair<Enr, Int>>().also { it[initiator.id] = Pair(initiator, AD_LIFE_STEPS) }
-                return listOf(TicketMessage(regTopicMessage.ticket, 0), RegConfirmation(regTopicMessage.topic))
+                return listOf(TicketMessage(ticket, 0), RegConfirmation(regTopicMessage.topic))
             }
             initiator.id !in topics[regTopicMessage.topic]!! -> {
                 topics[regTopicMessage.topic]?.set(initiator.id, Pair(initiator, AD_LIFE_STEPS))
-                return listOf(TicketMessage(regTopicMessage.ticket, 0), RegConfirmation(regTopicMessage.topic))
+                return listOf(TicketMessage(ticket, 0), RegConfirmation(regTopicMessage.topic))
             }
             else -> {
                 val registeredPair = topics[regTopicMessage.topic]!![initiator.id]!!
-                return listOf(TicketMessage(regTopicMessage.ticket, registeredPair.second))
+                return listOf(TicketMessage(ticket, registeredPair.second))
             }
         }
     }
