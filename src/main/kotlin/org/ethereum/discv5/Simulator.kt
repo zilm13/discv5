@@ -2,8 +2,10 @@ package org.ethereum.discv5
 
 import io.libp2p.core.PeerId
 import io.libp2p.core.multiformats.Multiaddr
+import org.ethereum.discv5.core.AD_LIFE_STEPS
 import org.ethereum.discv5.core.BUCKETS_COUNT
 import org.ethereum.discv5.core.Enr
+import org.ethereum.discv5.core.K_BUCKET
 import org.ethereum.discv5.core.KademliaTable
 import org.ethereum.discv5.core.MetaKey
 import org.ethereum.discv5.core.Node
@@ -16,14 +18,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-val PEER_COUNT = 100
+val PEER_COUNT = 500
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
-val ROUNDS_COUNT = 100
+val ROUNDS_COUNT = 500
 val LATENCY_LEG_MS = 100
 val LATENCY_MULTI_EACH_MS = 5 // 2 messages sent simultaneously = 100 + 5
 val SUBNET_SHARE_PCT = 1 // Which part of all peers are validators from one tracked subnet, in %
 val TARGET_PERCENTILE = 98
 val TIMEOUT_STEP = 1000 // If target percentile is not achieved until TIMEOUT_STEP, simulation is stopped
+val SUBNET_13 = ByteArray(1) { 13.toByte() }
 
 fun main(args: Array<String>) {
     println("Creating private key - enr pairs for $PEER_COUNT nodes")
@@ -68,7 +71,7 @@ fun main(args: Array<String>) {
 //    System.exit(-1)
 
     println("Run simulation with FINDNODE(distances) API method according to updated Discovery V5 protocol")
-    val enrStats = runSimulationImpl(peers, ROUNDS_COUNT)
+    val enrStats = runTopicAdSimulation(peers, ROUNDS_COUNT)
 //    visualizeSubnetPeersStats(peers)
     printSubnetPeersStats(enrStats)
 //    val trafficFindNodeStrict = gatherTrafficStats(peers)
@@ -88,7 +91,7 @@ fun gatherLatencyStats(peers: List<Node>): List<Int> {
     return peers.map { calcTotalTime(it) }.sorted()
 }
 
-fun runSimulationImpl(peers: List<Node>, rounds: Int): ArrayList<Pair<Int, Int>> {
+fun runEnrUpdateSimulation(peers: List<Node>, rounds: Int): List<Pair<Int, Int>> {
     assert(rounds > 50)
     peers.forEach(Node::initTasks)
     for (i in 0 until 50) {
@@ -101,7 +104,7 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int): ArrayList<Pair<Int, Int>>
         it.updateEnr(
             it.enr.seq.inc(),
             HashMap<ByteArray, ByteArray>().apply {
-                put(MetaKey.SUBNET.of, ByteArray(1) { 13.toByte() })
+                put(MetaKey.SUBNET.of, SUBNET_13)
             }
         )
     }
@@ -110,17 +113,50 @@ fun runSimulationImpl(peers: List<Node>, rounds: Int): ArrayList<Pair<Int, Int>>
     assert(subnetIds.isNotEmpty())
     println("Total subnet peers count: ${subnetIds.size}")
     val enrStats = ArrayList<Pair<Int, Int>>()
-    enrStats.add(calcSubnetPeersStats(peers, subnetIds))
+    enrStats.add(calcEnrSubnetPeersStats(peers, subnetIds))
     for (i in 51 until (51 + TIMEOUT_STEP)) {
         println("Simulating round #${i + 1}")
         peers.forEach(Node::step)
-        enrStats.add(calcSubnetPeersStats(peers, subnetIds))
+        enrStats.add(calcEnrSubnetPeersStats(peers, subnetIds))
         if (enrStats.last().second * 100.0 / (enrStats.last().first + enrStats.last().second) > TARGET_PERCENTILE) {
             break
         }
     }
 
     return enrStats
+}
+
+fun runTopicAdSimulation(peers: List<Node>, rounds: Int): List<Pair<Int, Int>> {
+    assert(rounds > 50)
+    peers.forEach(Node::initTasks)
+    for (i in 0 until 50) {
+        println("Simulating round #${i + 1}")
+        peers.forEach(Node::step)
+    }
+
+    println("Making $SUBNET_SHARE_PCT% of peers advertise their subnet")
+    val subnetPeers = peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt())
+    val currentRound = AtomicInteger(0)
+    for (i in 51 until rounds) {
+        currentRound.set(i)
+        println("Simulating round #${i + 1}")
+        if ((i - 51) % AD_LIFE_STEPS == 0) {
+            println("Register topic ads on round $i")
+            subnetPeers.forEach { node ->
+                println("Registering topic ads on peer ${node.enr.toId()} on round ${currentRound.get()}")
+                node.registerTopic(SUBNET_13, K_BUCKET, false) {
+                    println(
+                        "On round ${currentRound.get()} register topic task started at round $i on ${node.enr.toId()} is finished with following results: ${it.joinToString(
+                            ","
+                        )}"
+                    )
+                }
+            }
+        }
+        peers.forEach(Node::step)
+    }
+
+    return listOf(Pair(0, 0))
 }
 
 fun visualizeSubnetPeersStats(peers: List<Node>) {
@@ -139,7 +175,7 @@ fun visualizeSubnetPeersStats(peers: List<Node>) {
     println((header + stats).formatTable(true))
 }
 
-fun calcSubnetPeersStats(peers: List<Node>, subnetIds: Set<PeerId>): Pair<Int, Int> {
+fun calcEnrSubnetPeersStats(peers: List<Node>, subnetIds: Set<PeerId>): Pair<Int, Int> {
     val firstCounter = AtomicInteger(0)
     val secondCounter = AtomicInteger(0)
     peers.forEach { peer ->
@@ -156,7 +192,7 @@ fun calcSubnetPeersStats(peers: List<Node>, subnetIds: Set<PeerId>): Pair<Int, I
     return Pair(firstCounter.get(), secondCounter.get())
 }
 
-fun printSubnetPeersStats(enrStats: ArrayList<Pair<Int, Int>>) {
+fun printSubnetPeersStats(enrStats: List<Pair<Int, Int>>) {
     println("Peer knowledge stats")
     println("===================================")
     val header = "Round #\t Peers known from 1st subnet\t from 2nd subnet\t Total subnet peer enrs\n"

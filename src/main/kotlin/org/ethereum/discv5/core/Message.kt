@@ -1,5 +1,6 @@
 package org.ethereum.discv5.core
 
+import org.ethereum.discv5.util.ByteArrayWrapper
 import java.math.BigInteger
 
 interface Message {
@@ -55,7 +56,7 @@ class PongMessage(val seq: BigInteger) : Message {
     }
 }
 
-class RegTopicMessage(val topic: ByteArray, val enr: Enr, val ticket: ByteArray) : Message {
+class RegTopicMessage(val topic: ByteArrayWrapper, val enr: Enr, val ticket: ByteArray) : Message {
     override val type = MessageType.REGTOPIC
 
     /**
@@ -81,7 +82,7 @@ class TicketMessage(val ticket: ByteArray, val waitSteps: Int) : Message {
     }
 }
 
-class RegConfirmation(val topic: ByteArray) : Message {
+class RegConfirmation(val topic: ByteArrayWrapper) : Message {
     override val type = MessageType.REGCONFIRMATION
 
     /**
@@ -92,7 +93,7 @@ class RegConfirmation(val topic: ByteArray) : Message {
     }
 }
 
-class TopicQuery(val topic: ByteArray) : Message {
+class TopicQuery(val topic: ByteArrayWrapper) : Message {
     override val type = MessageType.TOPICQUERY
 
     /**

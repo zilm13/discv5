@@ -5,6 +5,7 @@ import io.libp2p.core.crypto.PrivKey
 import io.libp2p.core.crypto.sha256
 import io.libp2p.etc.types.copy
 import org.apache.logging.log4j.LogManager
+import org.ethereum.discv5.util.ByteArrayWrapper
 import java.math.BigInteger
 import java.util.LinkedList
 import java.util.Random
@@ -16,12 +17,12 @@ val BUCKETS_COUNT = 256
 val CHANCE_TO_FORGET = 0.2
 val NEIGHBORS_DISTANCES_LIMIT = 3
 val AD_RETRY_MAX_STEPS = 10
-val AD_LIFE_STEPS = 50
+val AD_LIFE_STEPS = 60
 val PARALLELISM = 3 // Parallelism of all actions
 
 data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router: Router) {
     val tasks: MutableList<Task> = ArrayList()
-    val topics: MutableMap<ByteArray, MutableMap<PeerId, Pair<Enr, Int>>> = HashMap()
+    val topics: MutableMap<ByteArrayWrapper, MutableMap<PeerId, Pair<Enr, Int>>> = HashMap()
     val table = KademliaTable(
         enr,
         K_BUCKET,
@@ -123,10 +124,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         }
 
         tasks.add(MessageRoundTripTask(this, other, FindNodeMessage(buckets.toList())) {
-            handle(
-                it,
-                other
-            ).map { message -> (message as NodesMessage).peers }.flatten().apply(cb)
+            handle(it, other)
+            it.map { message -> (message as NodesMessage).peers }.flatten().apply(cb)
         }.also {
             logger.trace("Task $it added")
         })
@@ -250,10 +249,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     internal fun ping(other: Enr, cb: (Boolean) -> Unit) {
         tasks.add(MessageRoundTripTask(this, other, PingMessage(enr.seq)) {
-            handle(
-                it,
-                other
-            ).isNotEmpty().apply(cb)
+            handle(it, other)
+            it.isNotEmpty().apply(cb)
         }.also {
             logger.trace("Task $it added")
         })
@@ -284,7 +281,10 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             mediaSearchTask = ParallelIdSearchTask(this, topicId, candidatesQueue::poll, PARALLELISM, radius, rnd)
         }
 
-        val task = TopicAdvertiseTask(this, mediaSearchTask, topicHash, AD_RETRY_MAX_STEPS, PARALLELISM, cb).also {
+        val task = TopicAdvertiseTask(
+            this, mediaSearchTask,
+            ByteArrayWrapper(topicHash), AD_RETRY_MAX_STEPS, PARALLELISM, cb
+        ).also {
             logger.trace("Task $it added")
         }
         tasks.add(task)

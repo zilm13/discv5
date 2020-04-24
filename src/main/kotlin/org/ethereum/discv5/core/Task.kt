@@ -1,6 +1,7 @@
 package org.ethereum.discv5.core
 
 import io.libp2p.core.PeerId
+import org.ethereum.discv5.util.ByteArrayWrapper
 import java.util.LinkedList
 import java.util.Queue
 import java.util.Random
@@ -139,7 +140,7 @@ class NodeUpdateTask(private val enr: Enr, private val node: Node) : Task {
 class IdSearchTask(
     private val node: Node,
     private val id: PeerId,
-    private val start: Enr,
+    private val start: Enr?,
     private val alpha: Int,
     private val rnd: Random,
     private val candidateReplaceOnFail: () -> Enr
@@ -160,6 +161,10 @@ class IdSearchTask(
             replacement?.step()
             return
         }
+        if (start == null) {
+            finished = true
+            return
+        }
 
         // First step could fail
         if (!firstStepOver) {
@@ -170,13 +175,15 @@ class IdSearchTask(
             return
         }
 
-        if (candidateReplacement.size == alpha) {
+        if (candidateReplacement.size == alpha || (candidates.isEmpty() && !secondCbPlaced)) {
             this.candidates = LinkedList(KademliaTable.filterNeighborhood(id, candidateReplacement.flatten(), K_BUCKET))
             candidateReplacement.clear()
         }
         if (candidateReplacement.size < alpha && candidates.isNotEmpty()) {
             if (!secondCbPlaced) {
-                node.findNodes(candidates.poll(), id, this::secondStepCb)
+                val next = candidates.poll()
+                candidates.add(next) // Move it to the end
+                node.findNodes(next, id, this::secondStepCb)
                 secondCbPlaced = true
             }
         }
@@ -203,15 +210,20 @@ class IdSearchTask(
         if (candidateReplacement.size < alpha) {
             return
         }
-        val replacement = KademliaTable.filterNeighborhood(id, candidateReplacement.flatten(), 1)[0]
-        val current = KademliaTable.filterNeighborhood(id, candidates, 1)[0]
-        if (replacement.id.to(id) == current.id.to(id)) {
+        val replacement = KademliaTable.filterNeighborhood(id, candidateReplacement.flatten(), 1)
+        val current = KademliaTable.filterNeighborhood(id, candidates, 1)
+        if (replacement.isEmpty()) {
+            finished = true
+        } else if (current.isEmpty() || replacement[0].id.to(id) >= current[0].id.to(id)) {
             candidates = LinkedList(candidateReplacement.flatten())
             finished = true
         }
     }
 
     override fun isOver(): Boolean {
+        if (replacement != null) {
+            return replacement!!.finished
+        }
         return finished
     }
 
@@ -220,11 +232,14 @@ class IdSearchTask(
             error("Task is not over. Query result when the task is over!")
         }
 
+        if (replacement != null) {
+            return replacement!!.candidates
+        }
         return candidates
     }
 
     override fun toString(): String {
-        return "IdSearchTask[Node=${node.enr.toId()}, id=$id, start=${start.toId()}]"
+        return "IdSearchTask[Node=${node.enr.toId()}, id=$id, start=${start?.toId() ?: "null"}]"
     }
 }
 
@@ -240,7 +255,11 @@ open class ParallelTask(private val subTasks: List<Task>) : Task {
 
 open class ParallelQueueTask(private val subTasks: Queue<Task>, private val parallelism: Int) : Task {
     private val current = HashSet<Task>()
+
     override fun step() {
+        if (isOver()) {
+            return
+        }
         while (current.size < parallelism && subTasks.isNotEmpty()) {
             current.add(subTasks.poll())
         }
@@ -327,16 +346,17 @@ class ImmediateProducer(private val result: List<Enr>) : ProducerTask<List<Enr>>
 class AdvertiseOnMediaTask(
     private val node: Node,
     private val media: Enr,
-    private val topicHash: ByteArray,
+    private val topicHash: ByteArrayWrapper,
     private val adRetrySteps: Int
 ) : ProducerTask<Boolean> {
     private var finished = false
     private var needRetryIn: Int = 0
     private var result = false
     private var retrying = false
+    private var waitingForTask = false
 
     override fun step() {
-        if (finished) {
+        if (finished || waitingForTask) {
             return
         }
         if (needRetryIn > 0) {
@@ -347,17 +367,15 @@ class AdvertiseOnMediaTask(
     }
 
     private fun placeTask() {
-        val ticket: ByteArray
-        if (retrying) {
-            ticket = ByteArray(TicketMessage.getAverageTicketSize())
+        waitingForTask = true
+        val ticket: ByteArray = if (retrying) {
+            ByteArray(TicketMessage.getAverageTicketSize())
         } else {
-            ticket = ByteArray(1)
+            ByteArray(1)
         }
         node.tasks.add(MessageRoundTripTask(node, media, RegTopicMessage(topicHash, node.enr, ticket)) {
-            node.handle(
-                it,
-                media
-            ).map { message -> message as TicketMessage }.toList().apply(this::handleAnswer)
+            node.handle(it, media)
+            it.filterIsInstance<TicketMessage>().toList().apply(this::handleAnswer)
         })
     }
 
@@ -367,16 +385,22 @@ class AdvertiseOnMediaTask(
             return
         }
         val message = messages[0]
-        if (message.waitSteps == 0) {
-            finished = true
-            result = true
-        } else if (message.waitSteps <= adRetrySteps) {
-            needRetryIn = message.waitSteps
-            retrying = true
-        } else {
-            finished = true
-            result = false
+        when {
+            message.waitSteps == 0 -> {
+                finished = true
+                result = true
+            }
+            // TODO: we could do other tasks in this period
+            message.waitSteps <= adRetrySteps -> {
+                needRetryIn = message.waitSteps
+                retrying = true
+            }
+            else -> {
+                finished = true
+                result = false
+            }
         }
+        waitingForTask = false
     }
 
     override fun isOver(): Boolean {
@@ -395,30 +419,32 @@ class AdvertiseOnMediaTask(
 class TopicAdvertiseTask(
     private val node: Node,
     private val mediaSearchTask: ProducerTask<List<Enr>>,
-    private val topicHash: ByteArray,
+    private val topicHash: ByteArrayWrapper,
     private val adRetrySteps: Int,
     private val parallelism: Int,
     private val cb: (List<Boolean>) -> Unit
 ) : Task {
     private lateinit var advertiseTask: ProducerTask<List<Boolean>>
+    private var finished = false
 
     override fun step() {
-        if (mediaSearchTask.isOver()) {
+        if (mediaSearchTask.isOver() && !this::advertiseTask.isInitialized) {
             val tasks =
                 mediaSearchTask.getResult().map { AdvertiseOnMediaTask(node, it, topicHash, adRetrySteps) }.toList()
             this.advertiseTask = ParallelQueueProducerTask<Boolean>(LinkedList(tasks), parallelism)
-        } else {
+        } else if (!this::advertiseTask.isInitialized) {
             mediaSearchTask.step()
             return
         }
         if (advertiseTask.isOver()) {
             cb(advertiseTask.getResult())
+            finished = true
             return
         }
         advertiseTask.step()
     }
 
     override fun isOver(): Boolean {
-        return mediaSearchTask.isOver() && advertiseTask.isOver()
+        return finished
     }
 }

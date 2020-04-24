@@ -136,7 +136,7 @@ class KademliaTable(
          * and returns up to [limit] size
          */
         fun filterNeighborhood(center: PeerId, candidates: Collection<Enr>, limit: Int): List<Enr> {
-            return candidates.sortedBy { center.to(it.id) }.take(limit)
+            return candidates.distinct().sortedBy { center.to(it.id) }.take(limit)
         }
     }
 }
