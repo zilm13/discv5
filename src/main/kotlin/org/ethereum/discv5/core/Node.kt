@@ -8,6 +8,8 @@ import org.apache.logging.log4j.LogManager
 import org.ethereum.discv5.core.task.ImmediateProducer
 import org.ethereum.discv5.core.task.ProducerTask
 import org.ethereum.discv5.core.task.Task
+import org.ethereum.discv5.core.task.enr.EnrRandomAttSubnetFindTask
+import org.ethereum.discv5.core.task.enr.EnrRandomSubnetFindTask
 import org.ethereum.discv5.core.task.regular.MessageRoundTripTask
 import org.ethereum.discv5.core.task.regular.NodeUpdateTask
 import org.ethereum.discv5.core.task.regular.PingTableVisit
@@ -104,7 +106,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         initTasks()
     }
 
-    fun updateEnr(seq: BigInteger, meta: Map<ByteArray, ByteArray>) {
+    fun updateEnr(seq: BigInteger, meta: Map<ByteArrayWrapper, ByteArrayWrapper>) {
         this.enr = Enr(enr.addr, enr.id, seq, meta)
         table.updateHome(enr)
     }
@@ -165,6 +167,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             MessageType.TICKET -> handleTicket(message as TicketMessage, initiator)
             MessageType.REGCONFIRMATION -> handleRegConfirmation(message as RegConfirmation, initiator)
             MessageType.TOPICQUERY -> handleTopicQuery(message as TopicQuery, initiator)
+            MessageType.FINDNODEBYATT -> handleFindAttNodes(message as FindNodeByAttributeMessage)
             else -> error("Not expected")
         }
     }
@@ -214,6 +217,14 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     private fun handleFindNodes(message: FindNodeMessage): List<Message> {
         return table.find(message.buckets).stream().limit(K_BUCKET.toLong()).toList()
+            .chunked(4).map {
+                NodesMessage(it)
+            }
+    }
+
+    private fun handleFindAttNodes(message: FindNodeByAttributeMessage): List<Message> {
+        return table.findAll().filter { it.meta[message.pair.first] == message.pair.second }
+            .stream().limit(K_BUCKET.toLong()).toList()
             .chunked(4).map {
                 NodesMessage(it)
             }
@@ -274,8 +285,13 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
      * @param random Whether to place it within topic hash peer ids
      * or on random set of peers
      */
-    internal fun registerTopic(topic: ByteArray, radius: Int, random: Boolean, cb: (List<Pair<Enr, Boolean>>) -> Unit) {
-        val topicHash = sha256(topic)
+    internal fun registerTopic(
+        topic: ByteArrayWrapper,
+        radius: Int,
+        random: Boolean,
+        cb: (List<Pair<Enr, Boolean>>) -> Unit
+    ) {
+        val topicHash = sha256(topic.bytes)
         val topicId = PeerId(topicHash)
         val mediaSearchTask: ProducerTask<List<Enr>>
         if (random) {
@@ -301,8 +317,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     // TODO: Random topic ad placement search compatibility
-    internal fun findTopic(topic: ByteArray, radius: Int, count: Int, cb: (Set<PeerId>) -> Unit) {
-        val topicHash = sha256(topic)
+    internal fun findTopic(topic: ByteArrayWrapper, radius: Int, count: Int, cb: (Set<PeerId>) -> Unit) {
+        val topicHash = sha256(topic.bytes)
         val topicId = PeerId(topicHash)
         val mediaSearchTask: ProducerTask<List<Enr>>
         val distance = topicId.to(enr.id)
@@ -315,6 +331,24 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         val task = TopicFindTask(
             this, mediaSearchTask,
             ByteArrayWrapper(topicHash), count, PARALLELISM, cb
+        ).also {
+            logger.trace("Task $it added")
+        }
+        tasks.add(task)
+    }
+
+    internal fun findEnrSubnet(subnet: ByteArrayWrapper, count: Int, cb: (Set<PeerId>) -> Unit) {
+        val task = EnrRandomSubnetFindTask(
+            this, table.findAll(), subnet, count, PARALLELISM, cb
+        ).also {
+            logger.trace("Task $it added")
+        }
+        tasks.add(task)
+    }
+
+    internal fun findEnrSubnetExperimental(subnet: ByteArrayWrapper, count: Int, cb: (Set<PeerId>) -> Unit) {
+        val task = EnrRandomAttSubnetFindTask(
+            this, table.findAll(), subnet, count, PARALLELISM, cb
         ).also {
             logger.trace("Task $it added")
         }

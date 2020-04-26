@@ -5,6 +5,7 @@ import io.libp2p.core.multiformats.Multiaddr
 import org.ethereum.discv5.core.Enr
 import org.ethereum.discv5.core.Node
 import org.ethereum.discv5.core.Router
+import org.ethereum.discv5.util.ByteArrayWrapper
 import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
 import org.ethereum.discv5.util.RoundCounter
@@ -19,10 +20,10 @@ val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 500
 val LATENCY_LEG_MS = 100
 val LATENCY_MULTI_EACH_MS = 5 // 2 messages sent simultaneously = 100 + 5
-val SUBNET_SHARE_PCT = 1 // Which part of all peers are validators from one tracked subnet, in %
+val SUBNET_SHARE_PCT = 10 // Which part of all peers are validators from one tracked subnet, in %
 val TARGET_PERCENTILE = 98
 val TIMEOUT_STEP = 1000 // If target percentile is not achieved until TIMEOUT_STEP, simulation is stopped
-val SUBNET_13 = ByteArray(1) { 13.toByte() }
+val SUBNET_13 = ByteArrayWrapper(ByteArray(1) { 13.toByte() })
 
 fun main(args: Array<String>) {
     println("Creating private key - enr pairs for $PEER_COUNT nodes")
@@ -81,7 +82,10 @@ fun main(args: Array<String>) {
     println("Run simulation with ENR attribute advertisement")
     val enrSimulator = EnrSimulator()
 //    val enrStats = enrSimulator.runEnrUpdateSimulationUntilDistributed(peers, roundCounter)
+    // Warm-up
     val enrStats = enrSimulator.runEnrUpdateSimulationWTraffic(peers, roundCounter, router)
+    peers.forEach(Node::resetAll)
+    enrSimulator.runEnrSubnetSearch(peers, RoundCounter(ROUNDS_COUNT))
 //    enrSimulator.visualizeSubnetPeersStats(peers)
     enrSimulator.printSubnetPeersStats(enrStats)
     peers.forEach(Node::resetAll)

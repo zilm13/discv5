@@ -4,6 +4,7 @@ import io.libp2p.core.PeerId
 import org.ethereum.discv5.core.MetaKey
 import org.ethereum.discv5.core.Node
 import org.ethereum.discv5.core.Router
+import org.ethereum.discv5.util.ByteArrayWrapper
 import org.ethereum.discv5.util.RoundCounter
 import org.ethereum.discv5.util.calcTraffic
 import org.ethereum.discv5.util.formatTable
@@ -14,7 +15,6 @@ import kotlin.math.roundToInt
 /**
  * Simulator which uses ENR attribute fields for advertisement
  */
-// TODO: estimate traffic by delta with and without seq changes
 class EnrSimulator {
     fun runEnrUpdateSimulationUntilDistributed(peers: List<Node>, rounds: RoundCounter): List<Pair<Int, Int>> {
         peers.forEach(Node::initTasks)
@@ -22,7 +22,7 @@ class EnrSimulator {
         peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt()).forEach {
             it.updateEnr(
                 it.enr.seq.inc(),
-                HashMap<ByteArray, ByteArray>().apply {
+                HashMap<ByteArrayWrapper, ByteArrayWrapper>().apply {
                     put(MetaKey.SUBNET.of, SUBNET_13)
                 }
             )
@@ -64,8 +64,42 @@ class EnrSimulator {
 
         println("Total traffic for ${subnetIds.size} advertised nodes: ${subnetIds.mapNotNull { router.resolve(it) }
             .map { node -> calcTraffic(node) }.sum()}")
-        println("Total traffic for ${peers.size} all nodes: ${peers.map { calcTraffic(it) }.sum()}")
+        println("Total traffic for all ${peers.size} nodes: ${peers.map { calcTraffic(it) }.sum()}")
 
+        return listOf(Pair(0, 0))
+    }
+
+    fun runEnrSubnetSearch(
+        peers: List<Node>,
+        rounds: RoundCounter
+    ): List<Pair<Int, Int>> {
+        val currentRound = AtomicInteger(0)
+        val stepsSpent = AtomicInteger(0)
+        val count = 10
+        println("Making $count peers find at least $REQUIRE_ADS subnet peers each")
+        val searchers = peers.shuffled(RANDOM).take(count)
+        val remaining = AtomicInteger(count)
+        searchers.forEach {
+            it.findEnrSubnetExperimental(SUBNET_13, REQUIRE_ADS) { set ->
+//            it.findEnrSubnet(SUBNET_13, REQUIRE_ADS) { set ->
+                println("Peer ${it.enr.toId()} found subnet peers: ${set.map { it.toString() }.joinToString(",")}")
+                remaining.decrementAndGet()
+            }
+        }
+        while (rounds.hasNext()) {
+            val current = rounds.next()
+            currentRound.set(current)
+            println("Simulating round #${current + 1}")
+            if (remaining.get() == 0) {
+                println("$count peers found each $REQUIRE_ADS subnet peers")
+                break
+            }
+            peers.forEach(Node::step)
+            stepsSpent.addAndGet(remaining.get())
+        }
+
+        println("For $count searchers there were spent ${stepsSpent.get()} steps by searchers")
+        println("Total traffic for ${searchers.size} searchers: ${searchers.map { calcTraffic(it) }.sum()}")
         return listOf(Pair(0, 0))
     }
 
@@ -73,7 +107,7 @@ class EnrSimulator {
         peers.forEach {
             it.updateEnr(
                 it.enr.seq.inc(),
-                HashMap<ByteArray, ByteArray>().apply {
+                HashMap<ByteArrayWrapper, ByteArrayWrapper>().apply {
                     put(MetaKey.SUBNET.of, SUBNET_13)
                 }
             )

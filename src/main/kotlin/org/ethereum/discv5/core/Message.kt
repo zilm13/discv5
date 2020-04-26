@@ -9,7 +9,7 @@ interface Message {
 }
 
 enum class MessageType {
-    FINDNODE, NODES, PING, PONG, REGTOPIC, TICKET, REGCONFIRMATION, TOPICQUERY
+    FINDNODE, NODES, PING, PONG, REGTOPIC, TICKET, REGCONFIRMATION, TOPICQUERY, FINDNODEBYATT
 }
 
 class FindNodeMessage(val buckets: List<Int>) : Message {
@@ -20,6 +20,20 @@ class FindNodeMessage(val buckets: List<Int>) : Message {
      */
     override fun getSize(): Int {
         return 72 + buckets.size
+    }
+}
+
+/**
+ * Experimental API message, returns all nodes with Enrs where pair.first key maps to pair.second.value
+ */
+class FindNodeByAttributeMessage(val pair: Pair<ByteArrayWrapper, ByteArrayWrapper>) : Message {
+    override val type = MessageType.FINDNODEBYATT
+
+    /**
+     * Estimates FindNodeByAttribute size.
+     */
+    override fun getSize(): Int {
+        return 72 + pair.first.size + pair.second.size
     }
 }
 

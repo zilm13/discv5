@@ -5,24 +5,30 @@ import com.google.protobuf.CodedOutputStream
 import com.google.protobuf.UnknownFieldSet
 import io.libp2p.core.PeerId
 import io.libp2p.core.multiformats.Multiaddr
+import org.ethereum.discv5.util.ByteArrayWrapper
 import java.io.ByteArrayOutputStream
 import java.math.BigInteger
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.experimental.xor
 
 val DEFAULT_SEQ: BigInteger = BigInteger.ONE
-val DEFAULT_META: Map<ByteArray, ByteArray> = HashMap()
+val DEFAULT_META: Map<ByteArrayWrapper, ByteArrayWrapper> = HashMap()
 
-enum class MetaKey(val of: ByteArray) {
-    SUBNET(ByteArray(1) { 1.toByte() })
+enum class MetaKey(val of: ByteArrayWrapper) {
+    SUBNET(ByteArrayWrapper(ByteArray(1) { 1.toByte() }))
 }
 
 /**
  * Ethereum Node Record
  * Doesn't comply with https://eips.ethereum.org/EIPS/eip-778 but contains all fields required for simulation
  */
-data class Enr(val addr: Multiaddr, val id: PeerId, val seq: BigInteger, val meta: Map<ByteArray, ByteArray>) {
-    private constructor(quartet: Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArray, ByteArray>>) :
+data class Enr(
+    val addr: Multiaddr,
+    val id: PeerId,
+    val seq: BigInteger,
+    val meta: Map<ByteArrayWrapper, ByteArrayWrapper>
+) {
+    private constructor(quartet: Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArrayWrapper, ByteArrayWrapper>>) :
             this(quartet.first, quartet.second, quartet.third, quartet.forth)
 
     constructor(addr: Multiaddr, id: PeerId) : this(addr, id, DEFAULT_SEQ, DEFAULT_META)
@@ -42,8 +48,8 @@ data class Enr(val addr: Multiaddr, val id: PeerId, val seq: BigInteger, val met
         val counter = AtomicInteger(1)
         meta.forEach { (key, value) ->
             run {
-                mapOut.writeByteArray(counter.getAndIncrement(), key)
-                mapOut.writeByteArray(counter.getAndIncrement(), value)
+                mapOut.writeByteArray(counter.getAndIncrement(), key.bytes)
+                mapOut.writeByteArray(counter.getAndIncrement(), value.bytes)
             }
         }
         mapOut.flush()
@@ -57,7 +63,7 @@ data class Enr(val addr: Multiaddr, val id: PeerId, val seq: BigInteger, val met
     }
 
     companion object {
-        private fun fromBytes(bytes: ByteArray): Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArray, ByteArray>> {
+        private fun fromBytes(bytes: ByteArray): Quartet<Multiaddr, PeerId, BigInteger, Map<ByteArrayWrapper, ByteArrayWrapper>> {
             val inputStream: CodedInputStream = CodedInputStream.newInstance(bytes)
             val fields: UnknownFieldSet = UnknownFieldSet.parseFrom(inputStream)
             val addrBytes = fields.getField(1).lengthDelimitedList[0].toByteArray()
@@ -67,11 +73,11 @@ data class Enr(val addr: Multiaddr, val id: PeerId, val seq: BigInteger, val met
                 CodedInputStream.newInstance(fields.getField(4).lengthDelimitedList[0].toByteArray())
             val metaFields: UnknownFieldSet = UnknownFieldSet.parseFrom(inputMetaStream)
             val counter = AtomicInteger(1)
-            val metaMap = HashMap<ByteArray, ByteArray>()
+            val metaMap = HashMap<ByteArrayWrapper, ByteArrayWrapper>()
             while (metaFields.hasField(counter.get())) {
                 val keyBytes = fields.getField(counter.getAndIncrement()).lengthDelimitedList[0].toByteArray()
                 val valueBytes = fields.getField(counter.getAndIncrement()).lengthDelimitedList[0].toByteArray()
-                metaMap[keyBytes] = valueBytes
+                metaMap[ByteArrayWrapper(keyBytes)] = ByteArrayWrapper(valueBytes)
             }
 
             return Quartet(Multiaddr(addrBytes), PeerId(idBytes), BigInteger(1, seqBytes), metaMap)

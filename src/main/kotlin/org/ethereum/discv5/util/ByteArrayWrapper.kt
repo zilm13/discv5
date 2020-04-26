@@ -3,9 +3,9 @@ package org.ethereum.discv5.util
 /**
  * Wraps ByteArray to make equals work
  */
-class ByteArrayWrapper(private val delegate: ByteArray) {
+class ByteArrayWrapper(val bytes: ByteArray) {
     /** Returns the number of elements in the array. */
-    val size: Int = delegate.size
+    val size: Int = bytes.size
 
 
     override fun equals(other: Any?): Boolean {
@@ -14,12 +14,12 @@ class ByteArrayWrapper(private val delegate: ByteArray) {
 
         other as ByteArrayWrapper
 
-        if (!delegate.contentEquals(other.delegate)) return false
+        if (!bytes.contentEquals(other.bytes)) return false
 
         return true
     }
 
     override fun hashCode(): Int {
-        return delegate.contentHashCode()
+        return bytes.contentHashCode()
     }
 }
