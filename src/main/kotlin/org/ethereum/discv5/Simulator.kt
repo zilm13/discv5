@@ -14,12 +14,12 @@ import org.ethereum.discv5.util.calcTotalTime
 import org.ethereum.discv5.util.calcTraffic
 import org.ethereum.discv5.util.formatTable
 
-val PEER_COUNT = 10000
+val PEER_COUNT = 1000
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 500
 val LATENCY_LEG_MS = 100
 val LATENCY_MULTI_EACH_MS = 5 // 2 messages sent simultaneously = 100 + 5
-val SUBNET_SHARE_PCT = 10 // Which part of all peers are validators from one tracked subnet, in %
+val SUBNET_SHARE_PCT = 1 // Which part of all peers are validators from one tracked subnet, in %
 val TARGET_PERCENTILE = 98
 val TIMEOUT_STEP = 1000 // If target percentile is not achieved until TIMEOUT_STEP, simulation is stopped
 val SUBNET_13 = ByteArray(1) { 13.toByte() }
@@ -68,25 +68,26 @@ fun main(args: Array<String>) {
 //    printKademliaTableStats(peers)
 //    System.exit(-1)
 
-    // TODO: Uncomment when need simulation with placement of topic advertisement
-    println("Run simulation with placing topic ads Discovery V5 protocol")
-    val topicSimulator = TopicSimulator()
     val roundCounter = RoundCounter(ROUNDS_COUNT)
-    topicSimulator.runTopicAdSimulationUntilSuccessfulPlacement(peers, roundCounter, router)
-    peers.forEach(Node::resetAll)
-    topicSimulator.runTopicSearch(peers, roundCounter)
-    peers.forEach(Node::resetAll)
+    // TODO: Uncomment when need simulation with placement of topic advertisement
+//    println("Run simulation with placing topic ads Discovery V5 protocol")
+//    val topicSimulator = TopicSimulator()
+//    topicSimulator.runTopicAdSimulationUntilSuccessfulPlacement(peers, roundCounter, router)
+//    peers.forEach(Node::resetAll)
+//    topicSimulator.runTopicSearch(peers, roundCounter)
+//    peers.forEach(Node::resetAll)
 
     // TODO: Uncomment when need simulation with using ENR attribute for advertisement
-//    println("Run simulation with ENR attribute advertisement")
-//    val enrSimulator = EnrSimulator()
-//    val enrStats = topicSimulator.runTopicAdSimulation(peers, ROUNDS_COUNT, router)
+    println("Run simulation with ENR attribute advertisement")
+    val enrSimulator = EnrSimulator()
+//    val enrStats = enrSimulator.runEnrUpdateSimulationUntilDistributed(peers, roundCounter)
+    val enrStats = enrSimulator.runEnrUpdateSimulationWTraffic(peers, roundCounter, router)
 //    enrSimulator.visualizeSubnetPeersStats(peers)
-//    enrSimulator.printSubnetPeersStats(enrStats)
-//    peers.forEach(Node::resetAll)
+    enrSimulator.printSubnetPeersStats(enrStats)
+    peers.forEach(Node::resetAll)
 }
 
-fun gatherTrafficStats(peers: List<Node>): List<Int> {
+fun gatherTrafficStats(peers: List<Node>): List<Long> {
     return peers.map { calcTraffic(it) }.sorted()
 }
 

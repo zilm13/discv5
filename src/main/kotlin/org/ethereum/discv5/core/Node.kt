@@ -40,8 +40,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         { enr, cb -> ping(enr, cb) },
         listOf()
     )
-    val outgoingMessages: MutableList<Int> = ArrayList()
-    val incomingMessages: MutableList<Int> = ArrayList()
+    val outgoingMessages: MutableList<Long> = ArrayList()
+    val incomingMessages: MutableList<Long> = ArrayList()
     val roundtripLatency: MutableList<List<Unit>> = ArrayList()
     private val logger = LogManager.getLogger("Node${enr.toId()}")
 

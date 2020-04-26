@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // * Various simulation setup utility functions *
 
-fun calcTraffic(node: Node): Int {
+fun calcTraffic(node: Node): Long {
     return node.incomingMessages.sum() + node.outgoingMessages.sum()
 }
 
@@ -70,7 +70,7 @@ fun calcParetoCdfReversed(y: Double, alpha: Double, xm: Double): Double {
 class RoundCounter(private val initSize: Int) {
     private val current = AtomicInteger(0)
 
-    fun next() : Int {
+    fun next(): Int {
         if (!hasNext()) {
             error("It's over!")
         }
@@ -82,7 +82,7 @@ class RoundCounter(private val initSize: Int) {
         return current.get() < initSize
     }
 
-    fun remaining() : Int {
+    fun remaining(): Int {
         return initSize - current.get()
     }
 }

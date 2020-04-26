@@ -57,7 +57,6 @@ class TopicSimulator {
 //        .split(",").map{PeerId.fromBase58(it)}.forEach { media.add(it) }
 
         println("For ${successfulAds.get() * AD_LIFE_STEPS} steps of advertisements there were spent ${stepsSpent.get()} steps by advertisers")
-        // Includes traffic for general peer tasks like ping-pongs
         println("Total traffic for ${subnetPeers.size} advertised nodes: ${subnetPeers.map { calcTraffic(it) }.sum()}")
         println("Total traffic for ${media.size} media nodes: ${media.mapNotNull { router.resolve(it) }
             .map { calcTraffic(it) }.sum()}")
