@@ -348,10 +348,10 @@ class AdvertiseOnMediaTask(
     private val media: Enr,
     private val topicHash: ByteArrayWrapper,
     private val adRetrySteps: Int
-) : ProducerTask<Boolean> {
+) : ProducerTask<Pair<Enr, Boolean>> {
     private var finished = false
     private var needRetryIn: Int = 0
-    private var result = false
+    private lateinit var result: Pair<Enr, Boolean>
     private var retrying = false
     private var waitingForTask = false
 
@@ -375,11 +375,11 @@ class AdvertiseOnMediaTask(
         }
         node.tasks.add(MessageRoundTripTask(node, media, RegTopicMessage(topicHash, node.enr, ticket)) {
             node.handle(it, media)
-            it.filterIsInstance<TicketMessage>().toList().apply(this::handleAnswer)
+            it.filterIsInstance<TicketMessage>().toList().run { handleAnswer(this, media) }
         })
     }
 
-    private fun handleAnswer(messages: List<TicketMessage>) {
+    private fun handleAnswer(messages: List<TicketMessage>, sender: Enr) {
         if (messages.isEmpty()) {
             placeTask()
             return
@@ -388,7 +388,7 @@ class AdvertiseOnMediaTask(
         when {
             message.waitSteps == 0 -> {
                 finished = true
-                result = true
+                result = Pair(sender, true)
             }
             // TODO: we could do other tasks in this period
             message.waitSteps <= adRetrySteps -> {
@@ -397,7 +397,7 @@ class AdvertiseOnMediaTask(
             }
             else -> {
                 finished = true
-                result = false
+                result = Pair(sender, false)
             }
         }
         waitingForTask = false
@@ -407,7 +407,7 @@ class AdvertiseOnMediaTask(
         return finished
     }
 
-    override fun getResult(): Boolean {
+    override fun getResult(): Pair<Enr, Boolean> {
         if (!isOver()) {
             error("Task is not over. Query result when the task is over!")
         }
@@ -422,16 +422,16 @@ class TopicAdvertiseTask(
     private val topicHash: ByteArrayWrapper,
     private val adRetrySteps: Int,
     private val parallelism: Int,
-    private val cb: (List<Boolean>) -> Unit
+    private val cb: (List<Pair<Enr, Boolean>>) -> Unit
 ) : Task {
-    private lateinit var advertiseTask: ProducerTask<List<Boolean>>
+    private lateinit var advertiseTask: ProducerTask<List<Pair<Enr, Boolean>>>
     private var finished = false
 
     override fun step() {
         if (mediaSearchTask.isOver() && !this::advertiseTask.isInitialized) {
             val tasks =
                 mediaSearchTask.getResult().map { AdvertiseOnMediaTask(node, it, topicHash, adRetrySteps) }.toList()
-            this.advertiseTask = ParallelQueueProducerTask<Boolean>(LinkedList(tasks), parallelism)
+            this.advertiseTask = ParallelQueueProducerTask<Pair<Enr, Boolean>>(LinkedList(tasks), parallelism)
         } else if (!this::advertiseTask.isInitialized) {
             mediaSearchTask.step()
             return

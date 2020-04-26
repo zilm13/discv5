@@ -11,13 +11,21 @@ class Router {
         idToNode.putIfAbsent(node.enr.id, node)
     }
 
+    fun resolve(peerId: PeerId): Node? {
+        return idToNode[peerId]
+    }
+
+    fun resolve(enr: Enr): Node? {
+        return resolve(enr.id)
+    }
+
     /**
      * TODO: real down nodes and network losses
      */
     fun route(from: Node, to: Enr, message: Message): List<Message> {
         from.outgoingMessages.add(message.getSize())
         from.roundtripLatency.add(listOf(Unit))
-        val toNode = idToNode[to.id]
+        val toNode = resolve(to)
         if (toNode == null) {
             logger.debug("Failed to route $message from Node${from.enr.toId()} to Node${to.toId()}, recipient not found")
             return emptyList()

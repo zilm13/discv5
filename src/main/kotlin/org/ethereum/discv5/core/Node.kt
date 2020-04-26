@@ -183,6 +183,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
                 })
         }
         val ticket = ByteArray(TicketMessage.getAverageTicketSize())
+        // TODO: 100 advertisements per topic limit
         when {
             regTopicMessage.topic !in topics -> {
                 topics[regTopicMessage.topic] =
@@ -262,7 +263,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
      * @param random Whether to place it within topic hash peer ids
      * or on random set of peers
      */
-    internal fun registerTopic(topic: ByteArray, radius: Int, random: Boolean, cb: (List<Boolean>) -> Unit) {
+    internal fun registerTopic(topic: ByteArray, radius: Int, random: Boolean, cb: (List<Pair<Enr, Boolean>>) -> Unit) {
         val topicHash = sha256(topic)
         val topicId = PeerId(topicHash)
         val mediaSearchTask: ProducerTask<List<Enr>>
