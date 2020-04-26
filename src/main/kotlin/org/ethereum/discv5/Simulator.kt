@@ -74,6 +74,7 @@ fun main(args: Array<String>) {
     println("Run simulation with placing topic ads Discovery V5 protocol")
     val topicSimulator = TopicSimulator()
     topicSimulator.runTopicAdSimulationUntilFistPlacement(peers, ROUNDS_COUNT, router)
+    peers.forEach(Node::resetAll)
 
     // TODO: Uncomment when need simulation with using ENR attribute for advertisement
 //    println("Run simulation with ENR attribute advertisement")
@@ -81,15 +82,7 @@ fun main(args: Array<String>) {
 //    val enrStats = topicSimulator.runTopicAdSimulation(peers, ROUNDS_COUNT, router)
 //    enrSimulator.visualizeSubnetPeersStats(peers)
 //    enrSimulator.printSubnetPeersStats(enrStats)
-
-
-//    val trafficFindNodeStrict = gatherTrafficStats(peers)
-//    val latencyFindNodeStrict = gatherLatencyStats(peers)
-    peers.forEach(Node::resetAll)
-//    println("trafficFindNodeStrict")
-//    trafficFindNodeStrict.forEach { println(it) }
-//    println("latencyFindNodeStrict")
-//    latencyFindNodeStrict.forEach { println(it) }
+//    peers.forEach(Node::resetAll)
 }
 
 fun gatherTrafficStats(peers: List<Node>): List<Int> {
