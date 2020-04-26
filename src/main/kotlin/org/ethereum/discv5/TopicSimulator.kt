@@ -5,11 +5,16 @@ import org.ethereum.discv5.core.AD_LIFE_STEPS
 import org.ethereum.discv5.core.K_BUCKET
 import org.ethereum.discv5.core.Node
 import org.ethereum.discv5.core.Router
+import org.ethereum.discv5.util.RoundCounter
 import org.ethereum.discv5.util.calcTraffic
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
+val REQUIRE_ADS = 16
+val TOPIC_SUCCESSFUL_SHARE_PCT = 80 // Topic considered advertised for group of peers when XX% of them placed ads
+val TOPIC_SUCCESSFUL_MEDIAS =
+    5 // Require at least XX media for each advertiser to consider topic placement as successful
 /**
  * Simulation which uses Discovery V5 TOPIC advertisements
  */
@@ -63,13 +68,13 @@ class TopicSimulator {
         return listOf(Pair(0, 0))
     }
 
-    fun runTopicAdSimulationUntilFistPlacement(
+    fun runTopicAdSimulationUntilSuccessfulPlacement(
         peers: List<Node>,
-        rounds: Int,
+        rounds: RoundCounter,
         router: Router
     ): List<Pair<Int, Int>> {
-        println("Making $SUBNET_SHARE_PCT% of peers advertise their subnet")
         val subnetPeers = peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt())
+        println("Making $SUBNET_SHARE_PCT% of peers (${subnetPeers.size}) advertise their subnet")
         val subnetPeersAdvertised = HashMap<PeerId, MutableSet<PeerId>>()
         val currentRound = AtomicInteger(0)
         val stepsSpent = AtomicInteger(0)
@@ -84,9 +89,10 @@ class TopicSimulator {
             successfulAds,
             subnetPeersAdvertised
         )
-        for (i in 0 until rounds) {
-            currentRound.set(i)
-            println("Simulating round #${i + 1}")
+        while (rounds.hasNext()) {
+            val current = rounds.next()
+            currentRound.set(current)
+            println("Simulating round #${current + 1}")
             val registeredSuccessfully = subnetPeersAdvertised.filter { it.value.size >= TOPIC_SUCCESSFUL_MEDIAS }.size
             if (registeredSuccessfully >= (subnetPeers.size * TOPIC_SUCCESSFUL_SHARE_PCT / 100.0)) {
                 println("For ${subnetPeers.size} subnet peers $registeredSuccessfully have more than $TOPIC_SUCCESSFUL_MEDIAS ad placements")
@@ -96,11 +102,43 @@ class TopicSimulator {
         }
 
         println("For ${successfulAds.get() * AD_LIFE_STEPS} steps of advertisements there were spent ${stepsSpent.get()} steps by advertisers")
-        // Includes traffic for general peer tasks like ping-pongs
         println("Total traffic for ${subnetPeers.size} advertised nodes: ${subnetPeers.map { calcTraffic(it) }.sum()}")
         println("Total traffic for ${media.size} media nodes: ${media.mapNotNull { router.resolve(it) }
             .map { calcTraffic(it) }.sum()}")
 
+        return listOf(Pair(0, 0))
+    }
+
+    fun runTopicSearch(
+        peers: List<Node>,
+        rounds: RoundCounter
+    ): List<Pair<Int, Int>> {
+        val currentRound = AtomicInteger(0)
+        val stepsSpent = AtomicInteger(0)
+        val count = 10
+        println("Making $count peers find at least $REQUIRE_ADS topic ads each")
+        val searchers = peers.shuffled(RANDOM).take(count)
+        val remaining = AtomicInteger(count)
+        searchers.forEach {
+            it.findTopic(SUBNET_13, K_BUCKET, REQUIRE_ADS) { set ->
+                println("Peer ${it.enr.toId()} found ads: ${set.map { it.toString() }.joinToString(",")}")
+                remaining.decrementAndGet()
+            }
+        }
+        while (rounds.hasNext()) {
+            val current = rounds.next()
+            currentRound.set(current)
+            println("Simulating round #${current + 1}")
+            if (remaining.get() == 0) {
+                println("$count peers found each $REQUIRE_ADS ads")
+                break
+            }
+            peers.forEach(Node::step)
+            stepsSpent.addAndGet(remaining.get())
+        }
+
+        println("For $count searchers there were spent ${stepsSpent.get()} steps by searchers")
+        println("Total traffic for ${searchers.size} searchers: ${searchers.map { calcTraffic(it) }.sum()}")
         return listOf(Pair(0, 0))
     }
 

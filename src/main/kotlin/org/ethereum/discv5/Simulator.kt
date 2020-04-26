@@ -7,13 +7,14 @@ import org.ethereum.discv5.core.Node
 import org.ethereum.discv5.core.Router
 import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
+import org.ethereum.discv5.util.RoundCounter
 import org.ethereum.discv5.util.calcKademliaPeers
 import org.ethereum.discv5.util.calcPeerDistribution
 import org.ethereum.discv5.util.calcTotalTime
 import org.ethereum.discv5.util.calcTraffic
 import org.ethereum.discv5.util.formatTable
 
-val PEER_COUNT = 1000
+val PEER_COUNT = 10000
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 val ROUNDS_COUNT = 500
 val LATENCY_LEG_MS = 100
@@ -21,9 +22,6 @@ val LATENCY_MULTI_EACH_MS = 5 // 2 messages sent simultaneously = 100 + 5
 val SUBNET_SHARE_PCT = 10 // Which part of all peers are validators from one tracked subnet, in %
 val TARGET_PERCENTILE = 98
 val TIMEOUT_STEP = 1000 // If target percentile is not achieved until TIMEOUT_STEP, simulation is stopped
-val TOPIC_SUCCESSFUL_SHARE_PCT = 80 // Topic considered advertised for group of peers when XX% of them placed ads
-val TOPIC_SUCCESSFUL_MEDIAS =
-    5 // Require at least XX media for each advertiser to consider topic placement as successful
 val SUBNET_13 = ByteArray(1) { 13.toByte() }
 
 fun main(args: Array<String>) {
@@ -73,7 +71,10 @@ fun main(args: Array<String>) {
     // TODO: Uncomment when need simulation with placement of topic advertisement
     println("Run simulation with placing topic ads Discovery V5 protocol")
     val topicSimulator = TopicSimulator()
-    topicSimulator.runTopicAdSimulationUntilFistPlacement(peers, ROUNDS_COUNT, router)
+    val roundCounter = RoundCounter(ROUNDS_COUNT)
+    topicSimulator.runTopicAdSimulationUntilSuccessfulPlacement(peers, roundCounter, router)
+    peers.forEach(Node::resetAll)
+    topicSimulator.runTopicSearch(peers, roundCounter)
     peers.forEach(Node::resetAll)
 
     // TODO: Uncomment when need simulation with using ENR attribute for advertisement

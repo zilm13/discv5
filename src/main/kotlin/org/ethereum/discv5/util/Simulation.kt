@@ -5,6 +5,7 @@ import org.ethereum.discv5.LATENCY_MULTI_EACH_MS
 import org.ethereum.discv5.core.BUCKETS_COUNT
 import org.ethereum.discv5.core.KademliaTable
 import org.ethereum.discv5.core.Node
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -64,4 +65,24 @@ fun calcDistribution(step: Double, alpha: Double, xm: Double, xFull: Double): Li
 
 fun calcParetoCdfReversed(y: Double, alpha: Double, xm: Double): Double {
     return xm / (1 - y).pow(1 / alpha)
+}
+
+class RoundCounter(private val initSize: Int) {
+    private val current = AtomicInteger(0)
+
+    fun next() : Int {
+        if (!hasNext()) {
+            error("It's over!")
+        }
+
+        return current.getAndIncrement()
+    }
+
+    fun hasNext(): Boolean {
+        return current.get() < initSize
+    }
+
+    fun remaining() : Int {
+        return initSize - current.get()
+    }
 }

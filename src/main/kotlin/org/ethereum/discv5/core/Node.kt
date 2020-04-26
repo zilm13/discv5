@@ -5,6 +5,16 @@ import io.libp2p.core.crypto.PrivKey
 import io.libp2p.core.crypto.sha256
 import io.libp2p.etc.types.copy
 import org.apache.logging.log4j.LogManager
+import org.ethereum.discv5.core.task.ImmediateProducer
+import org.ethereum.discv5.core.task.ProducerTask
+import org.ethereum.discv5.core.task.Task
+import org.ethereum.discv5.core.task.regular.MessageRoundTripTask
+import org.ethereum.discv5.core.task.regular.NodeUpdateTask
+import org.ethereum.discv5.core.task.regular.PingTableVisit
+import org.ethereum.discv5.core.task.regular.RecursiveTableVisit
+import org.ethereum.discv5.core.task.topic.ParallelIdSearchTask
+import org.ethereum.discv5.core.task.topic.TopicAdvertiseTask
+import org.ethereum.discv5.core.task.topic.TopicFindTask
 import org.ethereum.discv5.util.ByteArrayWrapper
 import java.math.BigInteger
 import java.util.LinkedList
@@ -91,6 +101,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         outgoingMessages.clear()
         incomingMessages.clear()
         roundtripLatency.clear()
+        initTasks()
     }
 
     fun updateEnr(seq: BigInteger, meta: Map<ByteArray, ByteArray>) {
@@ -271,8 +282,6 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             // FIXME: or use store of all known peers instead of only Kademlia?
             mediaSearchTask = ImmediateProducer(table.findAll().shuffled(rnd).take(radius))
         } else {
-            // it should be task
-            // take 3 closest
             val distance = topicId.to(enr.id)
             var candidates = table.find(distance)
             if (candidates.size < K_BUCKET) {
@@ -285,6 +294,27 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         val task = TopicAdvertiseTask(
             this, mediaSearchTask,
             ByteArrayWrapper(topicHash), AD_RETRY_MAX_STEPS, PARALLELISM, cb
+        ).also {
+            logger.trace("Task $it added")
+        }
+        tasks.add(task)
+    }
+
+    // TODO: Random topic ad placement search compatibility
+    internal fun findTopic(topic: ByteArray, radius: Int, count: Int, cb: (Set<PeerId>) -> Unit) {
+        val topicHash = sha256(topic)
+        val topicId = PeerId(topicHash)
+        val mediaSearchTask: ProducerTask<List<Enr>>
+        val distance = topicId.to(enr.id)
+        var candidates = table.find(distance)
+        if (candidates.size < K_BUCKET) {
+            candidates = KademliaTable.filterNeighborhood(topicId, table.findAll(), K_BUCKET)
+        }
+        val candidatesQueue = LinkedList(candidates)
+        mediaSearchTask = ParallelIdSearchTask(this, topicId, candidatesQueue::poll, PARALLELISM, radius, rnd)
+        val task = TopicFindTask(
+            this, mediaSearchTask,
+            ByteArrayWrapper(topicHash), count, PARALLELISM, cb
         ).also {
             logger.trace("Task $it added")
         }

@@ -11,6 +11,7 @@ import kotlin.math.roundToInt
 /**
  * Simulator which uses ENR attribute fields for advertisement
  */
+// TODO: estimate traffic by delta with and without seq changes
 class EnrSimulator {
     fun runEnrUpdateSimulation(peers: List<Node>, rounds: Int): List<Pair<Int, Int>> {
         assert(rounds > 50)
