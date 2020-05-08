@@ -10,13 +10,13 @@ import org.ethereum.discv5.util.InsecureRandom
 import org.ethereum.discv5.util.KeyUtils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 
 val RANDOM: InsecureRandom = InsecureRandom().apply { setInsecureSeed(1) }
 
 val K_BUCKET = 16
-val DISTANCE_DIVISOR = 1
 
 
 /**
@@ -46,8 +46,7 @@ class KademliaTableTests {
             peers[0].enr,
             K_BUCKET,
             256,
-            DISTANCE_DIVISOR,
-            { true },
+            { enr, cb -> cb(true) },
             peers.subList(1, peers.size).map { it.enr }
         )
     }
@@ -66,5 +65,35 @@ class KademliaTableTests {
         assertEquals(0, table.find(247).size)
         assertEquals(0, table.find(246).size)
         assertEquals(0, table.find(245).size)
+    }
+
+    @Test
+    @Disabled("Not a test, comment to run")
+    fun kademliaFillMeasure() {
+        val home = Enr(
+            Multiaddr("/ip4/127.0.1.1/tcp/0"),
+            PeerId(KeyUtils.privToPubCompressed(KeyUtils.genPrivKey(RANDOM)))
+        )
+        val kademlia = KademliaTable(
+            home,
+            K_BUCKET,
+            256,
+            { enr, cb -> cb(true) },
+            emptyList()
+        )
+        for (i in 0..2000000) {
+//            if (i % 100000 == 0) {
+            if (i % 10000 == 0) {
+                println("For $i nodes inserted ${kademlia.findAll().size} kept in KademliaTable")
+            }
+            val privKey = KeyUtils.genPrivKey(RANDOM)
+            val ip = "127.0.0.${(i / 50000) + 1}"
+            val addr = Multiaddr("/ip4/$ip/tcp/${i % 50000}")
+            val enr = Enr(
+                addr,
+                PeerId(KeyUtils.privToPubCompressed(privKey))
+            )
+            kademlia.put(enr)
+        }
     }
 }

@@ -12,26 +12,20 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 val REQUIRE_ADS = 16
-val TOPIC_SUCCESSFUL_SHARE_PCT = 80 // Topic considered advertised for group of peers when XX% of them placed ads
+val TOPIC_SUCCESSFUL_SHARE_PCT = 99 // Topic considered advertised for group of peers when XX% of them placed ads
 val TOPIC_SUCCESSFUL_MEDIAS =
     5 // Require at least XX media for each advertiser to consider topic placement as successful
+
 /**
  * Simulation which uses Discovery V5 TOPIC advertisements
  */
 class TopicSimulator {
     fun runTopicAdSimulation(
         peers: List<Node>,
-        rounds: Int,
+        rounds: RoundCounter,
         router: Router
     ): List<Pair<Int, Int>> {
-        // TODO: remove
-        assert(rounds > 50)
         peers.forEach(Node::initTasks)
-        for (i in 0 until 50) {
-            println("Simulating round #${i + 1}")
-            peers.forEach(Node::step)
-        }
-
         println("Making $SUBNET_SHARE_PCT% of peers advertise their subnet")
         val subnetPeers = peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt())
         val currentRound = AtomicInteger(0)
@@ -39,12 +33,13 @@ class TopicSimulator {
         val successfulAds = AtomicInteger(0)
         val media = HashSet<PeerId>()
         val finished = AtomicBoolean(false)
-        for (i in 51 until rounds) {
-            currentRound.set(i)
-            println("Simulating round #${i + 1}")
-            if ((i - 51) % AD_LIFE_STEPS == 0) {
+        while (rounds.hasNext()) {
+            val current = rounds.next()
+            currentRound.set(current)
+            println("Simulating round #${current + 1}")
+            if (current % AD_LIFE_STEPS == 0) {
                 // Comment to skip register topic
-                registerTopicSubtask(i, currentRound, subnetPeers, media, stepsSpent, successfulAds)
+                registerTopicSubtask(current, currentRound, subnetPeers, media, stepsSpent, successfulAds)
             }
             if (finished.get()) {
                 break
@@ -72,6 +67,7 @@ class TopicSimulator {
         rounds: RoundCounter,
         router: Router
     ): List<Pair<Int, Int>> {
+        peers.forEach(Node::initTasks)
         val subnetPeers = peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt())
         println("Making $SUBNET_SHARE_PCT% of peers (${subnetPeers.size}) advertise their subnet")
         val subnetPeersAdvertised = HashMap<PeerId, MutableSet<PeerId>>()

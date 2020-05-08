@@ -28,8 +28,8 @@ val K_BUCKET = 16
 val BUCKETS_COUNT = 256
 val CHANCE_TO_FORGET = 0.2
 val NEIGHBORS_DISTANCES_LIMIT = 3
-val AD_RETRY_MAX_STEPS = 10
-val AD_LIFE_STEPS = 60
+val AD_RETRY_MAX_STEPS = 1000
+val AD_LIFE_STEPS = 9000 // assuming step is 100ms
 val PARALLELISM = 3 // Parallelism of all actions
 
 data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router: Router) {
@@ -231,8 +231,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     private fun handleNodes(message: NodesMessage, initiator: Enr): List<Message> {
-        this.table.put(initiator, this::ping)
-        message.peers.forEach { enrFound -> this.table.put(enrFound, this::ping) }
+        this.table.put(initiator)
+        message.peers.forEach { enrFound -> this.table.put(enrFound) }
         return emptyList()
     }
 
@@ -261,7 +261,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     private fun handlePong(message: PongMessage, initiator: Enr): List<Message> {
         if (initiator.seq == message.seq) {
-            this.table.put(initiator, this::ping)
+            this.table.put(initiator)
         } else {
             tasks.add(NodeUpdateTask(initiator, this).also {
                 logger.debug("Task $it added as PONG shows new sequence ${message.seq}")

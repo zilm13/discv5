@@ -67,10 +67,10 @@ class KademliaTable(
     private val logger = LogManager.getLogger("Table${home.toId()}")
 
     init {
-        bootNodes.forEach { put(it, liveCheck) }
+        bootNodes.forEach { put(it) }
     }
 
-    fun put(enr: Enr, liveCheck: (Enr, (Boolean) -> Unit) -> Unit) {
+    fun put(enr: Enr) {
         if (home.id == enr.id) {
             return
         }
