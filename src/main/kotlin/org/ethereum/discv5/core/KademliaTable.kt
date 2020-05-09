@@ -60,17 +60,17 @@ class KademliaTable(
     var home: Enr,
     private val bucketSize: Int,
     private val numberBuckets: Int,
-    private val liveCheck: (Enr, (Boolean) -> Unit) -> Unit,
+    liveCheck: (Enr, (Boolean) -> Unit) -> Unit,
     bootNodes: Collection<Enr> = ArrayList()
 ) {
     private val buckets: MutableMap<Int, Bucket> = HashMap()
     private val logger = LogManager.getLogger("Table${home.toId()}")
 
     init {
-        bootNodes.forEach { put(it) }
+        bootNodes.forEach { put(it, liveCheck) }
     }
 
-    fun put(enr: Enr) {
+    fun put(enr: Enr, liveCheck: (Enr, (Boolean) -> Unit) -> Unit) {
         if (home.id == enr.id) {
             return
         }

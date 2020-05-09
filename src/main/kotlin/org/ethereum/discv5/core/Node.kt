@@ -231,8 +231,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     private fun handleNodes(message: NodesMessage, initiator: Enr): List<Message> {
-        this.table.put(initiator)
-        message.peers.forEach { enrFound -> this.table.put(enrFound) }
+        this.table.put(initiator, this::ping)
+        message.peers.forEach { enrFound -> this.table.put(enrFound, this::ping) }
         return emptyList()
     }
 
@@ -261,7 +261,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     private fun handlePong(message: PongMessage, initiator: Enr): List<Message> {
         if (initiator.seq == message.seq) {
-            this.table.put(initiator)
+            this.table.put(initiator, this::ping)
         } else {
             tasks.add(NodeUpdateTask(initiator, this).also {
                 logger.debug("Task $it added as PONG shows new sequence ${message.seq}")

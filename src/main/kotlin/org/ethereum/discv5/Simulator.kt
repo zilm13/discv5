@@ -59,7 +59,7 @@ fun main(args: Array<String>) {
     println("Filling peer's Kademlia tables according to distribution")
     peers.forEachIndexed() { index, peer ->
         (1..peerDistribution[index]).map { peers[RANDOM.nextInt(PEER_COUNT)] }
-            .forEach { peer.table.put(it.enr) }
+            .forEach { peer.table.put(it.enr) { enr, cb -> cb(true) } }
         if (index > 0 && index % 1000 == 0) {
             println("$index peer tables filled")
         }
@@ -71,25 +71,25 @@ fun main(args: Array<String>) {
 
     val roundCounter = RoundCounter(ROUNDS_COUNT)
     // TODO: Uncomment when need simulation with placement of topic advertisement
-    println("Run simulation with placing topic ads Discovery V5 protocol")
-    val topicSimulator = TopicSimulator()
-    topicSimulator.runTopicAdSimulation(peers, roundCounter, router)
-//    topicSimulator.runTopicAdSimulationUntilSuccessfulPlacement(peers, roundCounter, router)
-    peers.forEach(Node::resetAll)
-//    topicSimulator.runTopicSearch(peers, roundCounter)
+//    println("Run simulation with placing topic ads Discovery V5 protocol")
+//    val topicSimulator = TopicSimulator()
+//    topicSimulator.runTopicAdSimulation(peers, roundCounter, router)
+////    topicSimulator.runTopicAdSimulationUntilSuccessfulPlacement(peers, roundCounter, router)
 //    peers.forEach(Node::resetAll)
+////    topicSimulator.runTopicSearch(peers, roundCounter)
+////    peers.forEach(Node::resetAll)
 
     // TODO: Uncomment when need simulation with using ENR attribute for advertisement
-//    println("Run simulation with ENR attribute advertisement")
-//    val enrSimulator = EnrSimulator()
-////    val enrStats = enrSimulator.runEnrUpdateSimulationUntilDistributed(peers, roundCounter)
-//    // Warm-up
+    println("Run simulation with ENR attribute advertisement")
+    val enrSimulator = EnrSimulator()
+    val enrStats = enrSimulator.runEnrUpdateSimulationUntilDistributed(peers, roundCounter)
+    // Warm-up
 //    val enrStats = enrSimulator.runEnrUpdateSimulationWTraffic(peers, roundCounter, router)
 //    peers.forEach(Node::resetAll)
 //    enrSimulator.runEnrSubnetSearch(peers, RoundCounter(ROUNDS_COUNT))
-////    enrSimulator.visualizeSubnetPeersStats(peers)
-//    enrSimulator.printSubnetPeersStats(enrStats)
-//    peers.forEach(Node::resetAll)
+//    enrSimulator.visualizeSubnetPeersStats(peers)
+    enrSimulator.printSubnetPeersStats(enrStats)
+    peers.forEach(Node::resetAll)
 }
 
 fun gatherTrafficStats(peers: List<Node>): List<Long> {

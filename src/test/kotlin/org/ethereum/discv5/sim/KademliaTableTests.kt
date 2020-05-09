@@ -93,7 +93,7 @@ class KademliaTableTests {
                 addr,
                 PeerId(KeyUtils.privToPubCompressed(privKey))
             )
-            kademlia.put(enr)
+            kademlia.put(enr) { _, cb -> cb(true) }
         }
     }
 }
