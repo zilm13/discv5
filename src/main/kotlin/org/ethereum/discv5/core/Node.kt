@@ -45,6 +45,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     val outgoingMessages: MutableList<Long> = ArrayList()
     val incomingMessages: MutableList<Long> = ArrayList()
     val roundtripLatency: MutableList<List<Unit>> = ArrayList()
+    val enrQueries: MutableList<Long> = ArrayList()
     private val logger = LogManager.getLogger("Node${enr.toId()}")
 
     /**
@@ -59,7 +60,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
             it.add(RecursiveTableVisit(this) { enr ->
                 this.findNodes(enr, cb = {})
             })
-            it.add(PingTableVisit(this))
+            it.add(PingTableVisit(this, PARALLELISM))
         }
     }
 
@@ -103,6 +104,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         outgoingMessages.clear()
         incomingMessages.clear()
         roundtripLatency.clear()
+        enrQueries.clear()
         initTasks()
     }
 
@@ -216,6 +218,9 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     private fun handleFindNodes(message: FindNodeMessage): List<Message> {
+        if (message.buckets.size == 1 && message.buckets.single() == 0) {
+            enrQueries.add(enr.seq.longValueExact())
+        }
         return table.find(message.buckets).stream().limit(K_BUCKET.toLong()).toList()
             .chunked(4).map {
                 NodesMessage(it)

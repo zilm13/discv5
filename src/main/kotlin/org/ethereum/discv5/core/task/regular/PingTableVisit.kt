@@ -9,22 +9,24 @@ import java.util.Queue
 /**
  * Naive implementation without task updates between rounds
  */
-class PingTableVisit(private val node: Node) : Task {
+class PingTableVisit(private val node: Node, private val parallelism: Int = 1) : Task {
     private val peers: Queue<Enr> = LinkedList()
 
     private fun isRoundOver(): Boolean = peers.isEmpty()
 
     override fun step() {
-        if (isRoundOver()) {
-            peers.addAll(node.table.findAll())
-        }
-        if (peers.isEmpty()) { // XXX: still could be empty
-            return
-        }
-        val current = peers.poll()
-        node.ping(current) {
-            if (!it) {
-                node.table.remove(current)
+        for (i in 0 until parallelism) {
+            if (isRoundOver()) {
+                peers.addAll(node.table.findAll())
+            }
+            if (peers.isEmpty()) { // XXX: still could be empty
+                return
+            }
+            val current = peers.poll()
+            node.ping(current) {
+                if (!it) {
+                    node.table.remove(current)
+                }
             }
         }
     }
