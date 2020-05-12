@@ -23,6 +23,10 @@ class Bucket(
      */
     fun put(enr: Enr, liveCheck: (Enr, (Boolean) -> Unit) -> Unit) {
         if (containsById(enr.id)) {
+            if (findById(enr.id)!!.seq > enr.seq) {
+                // Incoming data is definitely outdated
+                return
+            }
             removeById(enr.id)
         }
         if (size == maxSize) {
