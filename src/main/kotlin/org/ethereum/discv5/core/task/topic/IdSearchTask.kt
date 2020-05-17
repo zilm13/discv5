@@ -35,6 +35,9 @@ class IdSearchTask(
             return
         }
         if (replacement != null) {
+            if (replacement!!.finished) {
+                finished = true
+            }
             replacement?.step()
             return
         }
