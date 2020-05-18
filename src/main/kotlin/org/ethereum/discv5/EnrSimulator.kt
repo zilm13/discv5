@@ -3,7 +3,6 @@ package org.ethereum.discv5
 import io.libp2p.core.PeerId
 import org.ethereum.discv5.core.MetaKey
 import org.ethereum.discv5.core.Node
-import org.ethereum.discv5.core.Router
 import org.ethereum.discv5.util.ByteArrayWrapper
 import org.ethereum.discv5.util.RoundCounter
 import org.ethereum.discv5.util.calcTraffic
@@ -19,7 +18,8 @@ class EnrSimulator {
     fun runEnrUpdateSimulationUntilDistributed(peers: List<Node>, rounds: RoundCounter): List<Pair<Int, Int>> {
         peers.forEach(Node::initTasks)
         println("Making $SUBNET_SHARE_PCT% of peers with ENR from subnet")
-        peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt()).forEach {
+        val subnetNodes = peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt())
+        subnetNodes.forEach {
             it.updateEnr(
                 it.enr.seq.inc(),
                 HashMap<ByteArrayWrapper, ByteArrayWrapper>().apply {
@@ -28,7 +28,10 @@ class EnrSimulator {
             )
         }
 
-        val subnetIds = peers.filter { it.enr.seq == BigInteger.valueOf(2) }.map { it.enr.id }.toSet()
+        // TODO: Uncomment to test Ping Shower
+//        subnetNodes.forEach { it.firePingShower() }
+
+        val subnetIds = subnetNodes.map { it.enr.id }.toSet()
         assert(subnetIds.isNotEmpty())
         println("Total subnet peers count: ${subnetIds.size}")
         val enrStats = ArrayList<Pair<Int, Int>>()
@@ -38,50 +41,43 @@ class EnrSimulator {
             println("Simulating round #$current")
             peers.forEach(Node::step)
             enrStats.add(calcEnrSubnetPeersStats(peers, subnetIds))
+
+            // TODO: uncomment to print traffic stats on each step
+//            println("Cumulative traffic for ${subnetIds.size} advertised nodes: " +
+//                    "${subnetNodes.map { node -> calcTraffic(node) }.sum()}"
+//            )
+
+            // TODO: comment to avoid quit on TARGET_PERCENTILE'% distribution reached
             if (enrStats.last().second * 100.0 / (enrStats.last().first + enrStats.last().second) > TARGET_PERCENTILE) {
                 break
             }
         }
 
+        println("Cumulative traffic for ${subnetIds.size} advertised nodes: ${subnetNodes.map { node -> calcTraffic(node) }
+            .sum()}")
+        println("Cumulative fresh ENR queries: ${subnetNodes.map { node -> node.enrQueries.filter { it == 2L }.count() }
+            .sum()}")
         return enrStats
-    }
-
-    fun runEnrUpdateSimulationWTraffic(peers: List<Node>, rounds: RoundCounter, router: Router): List<Pair<Int, Int>> {
-        peers.forEach(Node::initTasks)
-        println("Making $SUBNET_SHARE_PCT% of peers with ENR from subnet")
-        val subnetPeers = peers.shuffled(RANDOM).take((peers.size * SUBNET_SHARE_PCT / 100.0).roundToInt())
-        // TODO: Comment if don't need to change subnet
-        changeSubnetForPeers(subnetPeers)
-
-        val subnetIds = subnetPeers.map { it.enr.id }.toSet()
-        assert(subnetIds.isNotEmpty())
-        println("Total subnet peers count: ${subnetIds.size}")
-        while (rounds.hasNext()) {
-            val current = rounds.next()
-            println("Simulating round #$current")
-            peers.forEach(Node::step)
-        }
-
-        println("Total traffic for ${subnetIds.size} advertised nodes: ${subnetIds.mapNotNull { router.resolve(it) }
-            .map { node -> calcTraffic(node) }.sum()}")
-        println("Total traffic for all ${peers.size} nodes: ${peers.map { calcTraffic(it) }.sum()}")
-
-        return listOf(Pair(0, 0))
     }
 
     fun runEnrSubnetSearch(
         peers: List<Node>,
-        rounds: RoundCounter
+        rounds: RoundCounter,
+        searcherCount: Int,
+        requireAds: Int
     ): List<Pair<Int, Int>> {
         val currentRound = AtomicInteger(0)
         val stepsSpent = AtomicInteger(0)
-        val count = 10
-        println("Making $count peers find at least $REQUIRE_ADS subnet peers each")
-        val searchers = peers.shuffled(RANDOM).take(count)
-        val remaining = AtomicInteger(count)
+        println("Making $searcherCount peers find at least $requireAds subnet peers each")
+        val searchers = peers.shuffled(RANDOM).take(searcherCount)
+        val remaining = AtomicInteger(searcherCount)
+
+        // TODO: comment to skip search
         searchers.forEach {
-            it.findEnrSubnetExperimental(SUBNET_13, REQUIRE_ADS) { set ->
-//            it.findEnrSubnet(SUBNET_13, REQUIRE_ADS) { set ->
+
+            // TODO: replace standard search to use experimental
+//            it.findEnrSubnetExperimental(SUBNET_13, requireAds) { set ->
+            it.findEnrSubnet(SUBNET_13, requireAds) { set ->
                 println("Peer ${it.enr.toId()} found subnet peers: ${set.map { it.toString() }.joinToString(",")}")
                 remaining.decrementAndGet()
             }
@@ -91,14 +87,14 @@ class EnrSimulator {
             currentRound.set(current)
             println("Simulating round #${current + 1}")
             if (remaining.get() == 0) {
-                println("$count peers found each $REQUIRE_ADS subnet peers")
+                println("$searcherCount peers found each $requireAds subnet peers")
                 break
             }
             peers.forEach(Node::step)
             stepsSpent.addAndGet(remaining.get())
         }
 
-        println("For $count searchers there were spent ${stepsSpent.get()} steps by searchers")
+        println("For $searcherCount searchers there were spent ${stepsSpent.get()} steps by searchers")
         println("Total traffic for ${searchers.size} searchers: ${searchers.map { calcTraffic(it) }.sum()}")
         return listOf(Pair(0, 0))
     }
@@ -144,6 +140,8 @@ class EnrSimulator {
                 }
         }
 
+        // TODO: Uncomment to print share of sequence 2 peers on each step
+//        println("%: ${secondCounter.get() * 100.0 / (firstCounter.get() + secondCounter.get())}")
         return Pair(firstCounter.get(), secondCounter.get())
     }
 

@@ -1,7 +1,5 @@
 package org.ethereum.discv5.util
 
-import org.ethereum.discv5.LATENCY_LEG_MS
-import org.ethereum.discv5.LATENCY_MULTI_EACH_MS
 import org.ethereum.discv5.core.BUCKETS_COUNT
 import org.ethereum.discv5.core.KademliaTable
 import org.ethereum.discv5.core.Node
@@ -13,13 +11,6 @@ import kotlin.math.roundToInt
 
 fun calcTraffic(node: Node): Long {
     return node.incomingMessages.sum() + node.outgoingMessages.sum()
-}
-
-fun calcTotalTime(node: Node): Int {
-    return node.roundtripLatency
-        .filter { it.isNotEmpty() }
-        .map { list -> LATENCY_LEG_MS + LATENCY_MULTI_EACH_MS * (list.size - 1) }
-        .sum()
 }
 
 fun calcKademliaPeers(table: KademliaTable): Int {
@@ -69,6 +60,14 @@ fun calcParetoCdfReversed(y: Double, alpha: Double, xm: Double): Double {
 
 class RoundCounter(private val initSize: Int) {
     private val current = AtomicInteger(0)
+
+    fun peekNext(): Int {
+        if (!hasNext()) {
+            error("It's over!")
+        }
+
+        return current.get()
+    }
 
     fun next(): Int {
         if (!hasNext()) {
