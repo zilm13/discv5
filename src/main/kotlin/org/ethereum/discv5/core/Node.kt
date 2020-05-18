@@ -10,6 +10,7 @@ import org.ethereum.discv5.core.task.ProducerTask
 import org.ethereum.discv5.core.task.Task
 import org.ethereum.discv5.core.task.enr.EnrRandomAttSubnetFindTask
 import org.ethereum.discv5.core.task.enr.EnrRandomSubnetFindTask
+import org.ethereum.discv5.core.task.enr.PingShowerTask
 import org.ethereum.discv5.core.task.regular.MessageRoundTripTask
 import org.ethereum.discv5.core.task.regular.NodeUpdateTask
 import org.ethereum.discv5.core.task.regular.PingTableVisit
@@ -149,10 +150,16 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     /**
      * Performs FINDNODE(0) request on other node to get its enr and handles it
      */
-    internal fun updateNode(other: Enr): Enr {
+    internal fun updateNode(other: Enr): Enr? {
         val response = router.route(this, other, FindNodeMessage(listOf(0)))
         response.map { handle(it, other) }
-        return response.map { (it as NodesMessage).peers }.flatten().get(0)
+        return response.map { (it as NodesMessage).peers }.flatten().let {
+            if (it.isEmpty()) {
+                return@let null
+            } else {
+                return@let it[0]
+            }
+        }
     }
 
     fun handle(messages: List<Message>, initiator: Enr): List<Message> {
@@ -175,8 +182,8 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
     }
 
     private fun handleTopicQuery(topicQuery: TopicQuery, initiator: Enr): List<Message> {
-        return topics[topicQuery.topic]?.map { it.value.first }?.toList()
-            ?.chunked(4)?.map {
+        return topics[topicQuery.topic]?.map { it.value.first }?.shuffled(rnd)?.toList()?.take(K_BUCKET)?.chunked(4)
+            ?.map {
                 NodesMessage(it)
             } ?: emptyList()
     }
@@ -300,7 +307,6 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         val topicId = PeerId(topicHash)
         val mediaSearchTask: ProducerTask<List<Enr>>
         if (random) {
-            // FIXME: or use store of all known peers instead of only Kademlia?
             mediaSearchTask = ImmediateProducer(table.findAll().shuffled(rnd).take(radius))
         } else {
             val distance = topicId.to(enr.id)
@@ -321,7 +327,6 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
         tasks.add(task)
     }
 
-    // TODO: Random topic ad placement search compatibility
     internal fun findTopic(topic: ByteArrayWrapper, radius: Int, count: Int, cb: (Set<PeerId>) -> Unit) {
         val topicHash = sha256(topic.bytes)
         val topicId = PeerId(topicHash)
@@ -344,7 +349,16 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     internal fun findEnrSubnet(subnet: ByteArrayWrapper, count: Int, cb: (Set<PeerId>) -> Unit) {
         val task = EnrRandomSubnetFindTask(
-            this, table.findAll(), subnet, count, PARALLELISM, cb
+            this, table.findAll().shuffled(rnd), subnet, count, PARALLELISM, cb
+        ).also {
+            logger.trace("Task $it added")
+        }
+        tasks.add(task)
+    }
+
+    internal fun firePingShower() {
+        val task = PingShowerTask(
+            this
         ).also {
             logger.trace("Task $it added")
         }
@@ -353,7 +367,7 @@ data class Node(var enr: Enr, val privKey: PrivKey, val rnd: Random, val router:
 
     internal fun findEnrSubnetExperimental(subnet: ByteArrayWrapper, count: Int, cb: (Set<PeerId>) -> Unit) {
         val task = EnrRandomAttSubnetFindTask(
-            this, table.findAll(), subnet, count, PARALLELISM, cb
+            this, table.findAll().shuffled(rnd), subnet, count, PARALLELISM, cb
         ).also {
             logger.trace("Task $it added")
         }
