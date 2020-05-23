@@ -40,7 +40,7 @@ class KademliaTableTests {
                 addr,
                 PeerId(KeyUtils.privToPubCompressed(privKey))
             )
-            Node(enr, privKey, RANDOM, Router())
+            Node(enr, privKey, RANDOM, Router(RANDOM))
         }
         table = KademliaTable(
             peers[0].enr,
