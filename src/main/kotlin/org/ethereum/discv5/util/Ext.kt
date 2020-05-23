@@ -15,7 +15,7 @@ fun String.align(width: Int, alignLeft: Boolean = true, fillChar: Char = ' '): S
  * Formats string as table
  */
 fun String.formatTable(firstLineHeaders: Boolean = true, separator: String = "\t", alignLeft: Boolean = true): String {
-    val list = this.split("\n").map { it.split(separator) }
+    val list = this.trimEnd('\n').split("\n").map { it.split(separator) }
     require(list.map { it.size }.min() == list.map { it.size }.max()) { "Different number of columns" }
     val colSizes = list[0].indices.map { col -> list.map { it[col].length + 1 }.max() }
     val strings = list.map { raw ->
