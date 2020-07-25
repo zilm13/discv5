@@ -20,6 +20,8 @@ val log4j2Version = "2.11.2"
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
     implementation("io.libp2p:jvm-libp2p-minimal:0.3.2-RELEASE")
+    implementation ("org.apache.tuweni:tuweni-bytes:1.1.0")
+    implementation("com.google.guava:guava:27.1-jre")
     implementation("org.apache.logging.log4j:log4j-api:${log4j2Version}")
     implementation("org.apache.logging.log4j:log4j-core:${log4j2Version}")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.4.2")
@@ -33,12 +35,9 @@ tasks.test {
     }
 }
 
-val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions {
-    jvmTarget = "1.8"
-}
-
-val compileTestKotlin: KotlinCompile by tasks
-compileTestKotlin.kotlinOptions {
-    jvmTarget = "1.8"
+tasks.withType<KotlinCompile> {
+    kotlinOptions.jvmTarget = "1.8"
+    kotlinOptions {
+        freeCompilerArgs = listOf("-Xjvm-default=enable")
+    }
 }
